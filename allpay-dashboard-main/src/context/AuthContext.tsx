@@ -1,0 +1,178 @@
+import { createContext, use, useCallback, useEffect, useMemo, useState } from "react";
+import type { AuthUser, EmployeeRegisterPayload, LoginPortal, SignUpPayload } from "../types/auth";
+import { setAuthToken } from "../api/authToken";
+
+const SESSION_KEY = "allpay_session";
+
+import { API_BASE } from "../api/config";
+
+function readSession(): AuthUser | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as AuthUser;
+  } catch {
+    return null;
+  }
+}
+
+function writeSession(user: AuthUser | null, token?: string) {
+  if (!user) {
+    localStorage.removeItem(SESSION_KEY);
+    setAuthToken(null);
+  } else {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+    if (token) setAuthToken(token);
+  }
+}
+
+interface AuthContextValue {
+  user: AuthUser | null;
+  isReady: boolean;
+  signIn: (
+    email: string,
+    password: string,
+    portal: LoginPortal
+  ) => Promise<
+    | { ok: true }
+    | { ok: false; message: string; code?: string; employeeEmail?: string; employeeId?: string }
+  >;
+  signInEmployee: (
+    email: string,
+    password: string
+  ) => Promise<
+    | { ok: true }
+    | { ok: false; message: string; code?: string; employeeEmail?: string; employeeId?: string }
+  >;
+  signUp: (payload: SignUpPayload) => Promise<{ ok: true } | { ok: false; message: string }>;
+  registerEmployee: (
+    payload: EmployeeRegisterPayload
+  ) => Promise<
+    | { ok: true; message: string; ready?: boolean; employeeId?: string }
+    | {
+        ok: false;
+        message: string;
+        code?: "COMPLETE_REGISTRATION" | "ALREADY_REGISTERED" | "ALREADY_REGISTERED_PENDING";
+        employeeId?: string;
+      }
+  >;
+  signOut: () => void;
+}
+
+const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<AuthUser | null>(readSession);
+  const isReady = true;
+
+  const signIn = useCallback(async (email: string, password: string, portal: LoginPortal) => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password, portal }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return {
+          ok: false as const,
+          message: data.message || "Failed to login",
+          code: data.code,
+          employeeEmail: data.employeeEmail,
+          employeeId: data.employeeId,
+        };
+      }
+
+      writeSession(data.user, data.token);
+      setUser(data.user);
+      return { ok: true as const };
+    } catch {
+      return { ok: false as const, message: "Network error" };
+    }
+  }, []);
+
+  const signInEmployee = useCallback(async (email: string, password: string) => {
+    return signIn(email, password, "employee");
+  }, [signIn]);
+
+  const registerEmployee = useCallback(async (payload: EmployeeRegisterPayload) => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/employee/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return {
+          ok: false as const,
+          message: data.message || "Registration failed",
+          code: data.code,
+          employeeId: data.employeeId,
+        };
+      }
+      return {
+        ok: true as const,
+        message: data.message || "Registration successful.",
+        ready: data.ready,
+        employeeId: data.employeeId,
+      };
+    } catch {
+      return { ok: false as const, message: "Network error" };
+    }
+  }, []);
+
+  const signUp = useCallback(async (payload: SignUpPayload) => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) return { ok: false as const, message: data.message || "Failed to sign up" };
+      
+      writeSession(data.user, data.token);
+      setUser(data.user);
+      return { ok: true as const };
+    } catch {
+      return { ok: false as const, message: "Network error" };
+    }
+  }, []);
+
+  const signOut = useCallback(() => {
+    writeSession(null);
+    setUser(null);
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const idleMs = 30 * 60 * 1000;
+    let timer = window.setTimeout(() => signOut(), idleMs);
+    const bump = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => signOut(), idleMs);
+    };
+    window.addEventListener("pointerdown", bump);
+    window.addEventListener("keydown", bump);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("pointerdown", bump);
+      window.removeEventListener("keydown", bump);
+    };
+  }, [user, signOut]);
+
+  const value = useMemo(
+    () => ({ user, isReady, signIn, signInEmployee, signUp, registerEmployee, signOut }),
+    [user, isReady, signIn, signInEmployee, signUp, registerEmployee, signOut],
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useAuth() {
+  const ctx = use(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
+  return ctx;
+}

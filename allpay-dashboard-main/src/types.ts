@@ -1,0 +1,218 @@
+export type PaymentStatus =
+  | "draft"
+  | "order_created"
+  | "checkout_opened"
+  | "payment_processing"
+  | "payment_captured"
+  | "payment_failed"
+  | "payment_abandoned"
+  | "legacy_simulated";
+
+export type TransactionStatus = "pending" | "approved" | "rejected" | "flagged";
+export type AdminRole = "super_admin" | "finance_manager" | "hr_manager" | "auditor";
+
+export interface Employee {
+  id: string;
+  name: string;
+  email: string;
+  department: string;
+  role: "employee" | "manager";
+  active: boolean;
+  onboarded: boolean;
+  travelApproved: boolean;
+  /** True once admin assigns a serial ID (emp1, emp2, …). */
+  idAssigned?: boolean;
+  /** Set when the employee was created via admin invite (for future onboarding link). */
+  inviteToken?: string;
+  /** Mobile app invite code (e.g. MCR_58847). */
+  inviteCode?: string;
+  phone?: string;
+}
+
+export interface CompanyInfo {
+  id: string;
+  name: string | null;
+  invitePrefix: string | null;
+}
+
+export interface TransactionFlag {
+  id: string;
+  rule: string;
+  reason: string;
+  details: string;
+  /** Hidden from employee portal; visible in admin Fraud & Audit only */
+  adminOnly?: boolean;
+}
+
+export interface TimelineEvent {
+  id: string;
+  actor: string;
+  action: string;
+  timestamp: string;
+}
+
+export type CheckOutcome = "pass" | "warn" | "fail" | "skipped";
+export type CheckSeverity = "info" | "low" | "medium" | "high" | "critical";
+export type VerificationVerdict = "verified" | "low_risk" | "needs_review" | "high_risk";
+
+export interface VerificationCheck {
+  id: string;
+  label: string;
+  outcome: CheckOutcome;
+  severity: CheckSeverity;
+  riskPoints: number;
+  weight: number;
+  explanation: string;
+  evidence?: Record<string, unknown>;
+}
+
+export interface VerificationResult {
+  riskScore: number;
+  verdict: VerificationVerdict;
+  verdictLabel: string;
+  evidenceStrength: "transaction_matched" | "partial_evidence" | "heuristic_only";
+  headline: string;
+  checks: VerificationCheck[];
+  failedCheckIds: string[];
+  evaluatedAt: string;
+}
+
+export type ClaimTicketStatus =
+  | "none"
+  | "awaiting_employee"
+  | "employee_replied"
+  | "resolved_approved"
+  | "resolved_rejected";
+
+export interface ClaimTicketMessage {
+  id: string;
+  author: string;
+  authorRole: "system" | "employee" | "admin";
+  body: string;
+  createdAt: string;
+}
+
+export interface ClaimTicket {
+  status: ClaimTicketStatus;
+  openedAt: string;
+  reason: string;
+  messages: ClaimTicketMessage[];
+  closedAt?: string;
+  closedBy?: string;
+}
+
+export interface Transaction {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  department: string;
+  merchantName: string;
+  mcc: string;
+  category: string;
+  amount: number;
+  claimedAmount: number;
+  dateTime: string;
+  status: TransactionStatus;
+  upiApp: "GPay" | "PhonePe" | "Paytm" | "BHIM";
+  upiRefId: string;
+  isNew: boolean;
+  flags: TransactionFlag[];
+  adminDecision?: string;
+  adminDecisionAt?: string;
+  receiptUrl?: string;
+  hasMatchingAllpayRecord: boolean;
+  purposeCategory: string;
+  timeline: TimelineEvent[];
+  receiptFraudScore?: number;
+  receiptFraudTier?: "safe" | "manual_review" | "high_risk";
+  verification?: VerificationResult;
+  verificationScore?: number;
+  verificationVerdict?: VerificationVerdict;
+  claimTicket?: ClaimTicket;
+  claimTicketStatus?: ClaimTicketStatus;
+}
+
+export interface ExpensePolicy {
+  id: string;
+  name: string;
+  mccCategory: string;
+  maxPerTransaction: number;
+  maxPerMonth: number;
+  allowedDays: number[];
+  scopeType: "all" | "department" | "employee";
+  scopeValue?: string;
+  startDate: string;
+  endDate?: string;
+  active: boolean;
+}
+
+export interface TransactionFilters {
+  employeeId: string;
+  department: string;
+  category: string;
+  mcc: string;
+  startDate: string;
+  endDate: string;
+  minAmount: string;
+  maxAmount: string;
+  upiApp: string;
+  status: string;
+  search: string;
+}
+
+export interface AlertConfig {
+  delivery: "email" | "in_app" | "both";
+  threshold: "per_violation" | "daily_digest" | "weekly_summary";
+  mutedPolicies: string[];
+  mutedEmployees: string[];
+}
+
+export interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  role: AdminRole;
+  active: boolean;
+  twoFactor: boolean;
+  canRead?: boolean;
+  canWrite?: boolean;
+}
+
+export interface BillingPlan {
+  plan: "Basic" | "Pro" | "Enterprise";
+  billingCycle: "monthly" | "yearly";
+  nextRenewal: string;
+  licenses: number;
+  headcount: number;
+}
+
+export interface ExportAudit {
+  id: string;
+  actor: string;
+  format: "csv" | "pdf";
+  dateRange: string;
+  exportedAt: string;
+  recordCount: number;
+}
+
+export interface PaymentProof {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  department: string;
+  paymentType: string;
+  amount: number;
+  description: string;
+  receiptUrl?: string;
+  status: "pending" | "approved" | "rejected";
+  createdAt: string;
+  transactionId?: string;
+}
+
+export interface EmployeeDashboardSummary {
+  pendingReview: number;
+  withFlags: number;
+  approvedThisMonth: number;
+  proofsAwaiting: number;
+  proofsAwaitingReview: number;
+}

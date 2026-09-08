@@ -1,0 +1,142 @@
+jest.mock("../services/s3Service", () => ({
+  uploadFile: jest.fn().mockResolvedValue("http://localhost:5000/api/receipts/" + "a".repeat(32)),
+}));
+
+jest.mock("../services/receiptFraud/receiptFraudService", () => ({
+  analyzeReceiptFraud: jest.fn().mockResolvedValue({
+    fraudScore: 88,
+    tier: "high_risk",
+    tierLabel: "High Risk",
+    summary: "Fraud score 88/100 — high risk",
+    components: {
+      metadata: { score: 10, maxScore: 20, findings: ["No EXIF"] },
+      sightengine: { score: 36, maxScore: 40, findings: ["AI 90%"], configured: true },
+      ocr: { score: 12, maxScore: 20, findings: [] },
+      ela: { score: 14, maxScore: 20, findings: [] },
+    },
+  }),
+}));
+
+import { MongoMemoryServer } from "mongodb-memory-server";
+import mongoose from "mongoose";
+import request from "supertest";
+import { app } from "../server";
+import { seedDatabase } from "../seed";
+import { Transaction } from "../models";
+
+describe("employee payment proof fraud pipeline", () => {
+  let employeeToken: string;
+  let adminToken: string;
+  let memoryMongo: MongoMemoryServer | null = null;
+
+  beforeAll(async () => {
+    if (process.env.USE_LIVE_MONGO) {
+      await mongoose.connect(process.env.MONGO_URI!);
+    } else {
+      memoryMongo = await MongoMemoryServer.create();
+      await mongoose.connect(memoryMongo.getUri());
+    }
+    await mongoose.connection.db?.dropDatabase();
+    await seedDatabase();
+
+    const employeeLogin = await request(app)
+      .post("/api/auth/login")
+      .send({
+        employeeId: "emp0",
+        password: "password123",
+        portal: "employee",
+      });
+    employeeToken = employeeLogin.body.token;
+
+    const adminLogin = await request(app)
+      .post("/api/auth/login")
+      .send({ email: "test@example.com", password: "password123", portal: "admin" });
+    adminToken = adminLogin.body.token;
+  });
+
+  afterAll(async () => {
+    await mongoose.disconnect();
+    if (memoryMongo) await memoryMongo.stop();
+  });
+
+  it("submits payment proof and stores fraud score for admin", async () => {
+    const res = await request(app)
+      .post("/api/employee/payment-proofs")
+      .set("Authorization", `Bearer ${employeeToken}`)
+      .field("paymentType", "Cash")
+      .field("amount", "500")
+      .field("description", "Fraud pipeline test")
+      .attach("receipt", Buffer.from("fake-ai-image"), {
+        filename: "receipt.jpg",
+        contentType: "image/jpeg",
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.transaction.status).toBe("pending");
+    expect(res.body.transaction.flags).toEqual([]);
+
+    const txId = res.body.transaction.id as string;
+    const stored = await Transaction.findOne({ id: txId }).lean();
+    expect(stored?.status).toBe("flagged");
+    expect(stored?.receiptFraudScore).toBe(88);
+    expect(stored?.receiptFraudTier).toBe("high_risk");
+    expect(stored?.flags?.[0]?.reason).toBe("Receipt fraud — high risk");
+
+    const adminBootstrap = await request(app)
+      .get("/api/admin/bootstrap?limit=500")
+      .set("Authorization", `Bearer ${adminToken}`);
+    const adminTx = adminBootstrap.body.transactions.find((t: { id: string }) => t.id === txId);
+    expect(adminTx.receiptFraudScore).toBe(88);
+    expect(adminTx.receiptFraudTier).toBe("high_risk");
+  });
+
+  it("admin approve/reject updates employee payment proof submission status", async () => {
+    const submit = await request(app)
+      .post("/api/employee/payment-proofs")
+      .set("Authorization", `Bearer ${employeeToken}`)
+      .field("paymentType", "Cash")
+      .field("amount", "250")
+      .field("description", "Status sync test");
+
+    expect(submit.status).toBe(200);
+    const txId = submit.body.transaction.id as string;
+    const proofId = submit.body.paymentProof.id as string;
+
+    const approve = await request(app)
+      .post("/api/admin/transactions/approve")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ transactionId: txId, amount: 250 });
+    expect(approve.status).toBe(200);
+
+    const employeeBootstrap = await request(app)
+      .get("/api/employee/bootstrap")
+      .set("Authorization", `Bearer ${employeeToken}`);
+    const proof = employeeBootstrap.body.paymentProofs.find(
+      (p: { id: string }) => p.id === proofId
+    );
+    expect(proof?.status).toBe("approved");
+
+    const submit2 = await request(app)
+      .post("/api/employee/payment-proofs")
+      .set("Authorization", `Bearer ${employeeToken}`)
+      .field("paymentType", "Cash")
+      .field("amount", "100")
+      .field("description", "Reject sync test");
+    const txId2 = submit2.body.transaction.id as string;
+    const proofId2 = submit2.body.paymentProof.id as string;
+
+    const reject = await request(app)
+      .post("/api/admin/transactions/reject")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ transactionId: txId2, reason: "Invalid receipt" });
+    expect(reject.status).toBe(200);
+
+    const employeeBootstrap2 = await request(app)
+      .get("/api/employee/bootstrap")
+      .set("Authorization", `Bearer ${employeeToken}`);
+    const proof2 = employeeBootstrap2.body.paymentProofs.find(
+      (p: { id: string }) => p.id === proofId2
+    );
+    expect(proof2?.status).toBe("rejected");
+  });
+});

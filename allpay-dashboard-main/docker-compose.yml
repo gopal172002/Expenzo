@@ -1,0 +1,82 @@
+services:
+  mongodb:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - allpay_mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand({ ping: 1 }).ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  localstack:
+    image: localstack/localstack:3
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=s3
+      - DEBUG=0
+    volumes:
+      - allpay_localstack_data:/var/lib/localstack
+
+  localstack-setup:
+    image: amazon/aws-cli:2.15.0
+    depends_on:
+      - localstack
+    environment:
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        for i in 1 2 3 4 5 6 7 8 9 10; do
+          if aws --endpoint-url=http://localstack:4566 s3 ls 2>/dev/null; then break; fi
+          sleep 2
+        done
+        aws --endpoint-url=http://localstack:4566 s3 mb s3://receipts
+        echo "S3 bucket receipts is ready"
+
+  backend:
+    build: ./backend
+    # API is available at http://localhost:5173/api via the frontend proxy.
+    # Uncomment to also expose the API directly (e.g. Postman):
+    # ports:
+    #   - "5000:5000"
+    environment:
+      PORT: "5000"
+      MONGO_URI: mongodb://mongodb:27017/allpay_db
+      S3_ENDPOINT: http://localstack:4566
+      # Browser-accessible URLs for stored receipt links (host port is published)
+      S3_PUBLIC_BASE: http://localhost:4566
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
+      USE_RAZORPAY_UPI: ${USE_RAZORPAY_UPI:-false}
+      RECEIPT_STORAGE: mongo
+      API_PUBLIC_BASE: http://localhost:5173/api
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      localstack:
+        condition: service_started
+      localstack-setup:
+        condition: service_completed_successfully
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_API_BASE_URL: /api
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  allpay_mongo_data:
+  allpay_localstack_data:

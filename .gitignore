@@ -1,0 +1,17 @@
+**/node_modules/
+**/.git/
+**/.env
+**/.env.local
+**/.env.*.local
+**/dist/
+**/dist-ssr/
+**/build/
+**/data/
+**/backend/data/
+**/.gradle/
+**/Pods/
+**/coverage/
+**/.bundle/
+*.log
+*.tsbuildinfo
+.DS_Store

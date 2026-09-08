@@ -1,0 +1,120 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+  width: 100%;
+}
+
+body {
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background-color: #f3f4f6;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.5;
+  }
+  70% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.9);
+    opacity: 0.55;
+  }
+}
+
+@keyframes claimFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes claimProgressFill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes claimPinDrop {
+  0% {
+    transform: translate(-50%, -120%) scale(0.85);
+    opacity: 0;
+  }
+  60% {
+    transform: translate(-50%, -42%) scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes claimOrbitGlow {
+  0%,
+  100% {
+    outline-width: 3px;
+    opacity: 1;
+  }
+  50% {
+    outline-width: 5px;
+    opacity: 0.92;
+  }
+}
+
+.claim-fade-up {
+  animation: claimFadeUp 0.45s ease both;
+}
+
+.claim-fade-up-delay-1 {
+  animation-delay: 0.05s;
+}
+.claim-fade-up-delay-2 {
+  animation-delay: 0.1s;
+}
+.claim-fade-up-delay-3 {
+  animation-delay: 0.15s;
+}
+.claim-fade-up-delay-4 {
+  animation-delay: 0.2s;
+}
+.claim-fade-up-delay-5 {
+  animation-delay: 0.28s;
+}
+
+.claim-progress-bar > .MuiLinearProgress-bar {
+  transform-origin: left center;
+  animation: claimProgressFill 0.7s ease-out both;
+}
+
+.claim-map-pin {
+  animation: claimPinDrop 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.claim-orbit-active {
+  animation: claimOrbitGlow 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .claim-fade-up,
+  .claim-progress-bar > .MuiLinearProgress-bar,
+  .claim-map-pin,
+  .claim-orbit-active {
+    animation: none !important;
+  }
+}
