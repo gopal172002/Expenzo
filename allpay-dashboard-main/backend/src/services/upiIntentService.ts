@@ -8,6 +8,10 @@ import {
   type UpiIntentStatus,
 } from "../models";
 import {
+  applyLocationToRecord,
+  type PaymentLocationSnapshot,
+} from "./paymentLocation";
+import {
   applyUpiStatusTransition,
   isUpiIntentStatus,
   shouldCreateExpense,
@@ -29,6 +33,7 @@ export type CreateUpiIntentInput = {
   category?: string;
   mcc?: string;
   launchTxnRef?: string;
+  location?: PaymentLocationSnapshot | null;
 };
 
 export type UpiIntentResultInput = {
@@ -39,6 +44,7 @@ export type UpiIntentResultInput = {
   upiTxnRef?: string;
   approvalRefNo?: string;
   responseCode?: string;
+  location?: PaymentLocationSnapshot | null;
 };
 
 function paiseToDashboardAmount(amountPaise: number): number {
@@ -121,6 +127,9 @@ export async function createUpiIntentPayment(
     launchTxnRef: (input.launchTxnRef ?? launchTxnRefFromId(paymentId)).slice(0, 35),
     initiatedAt: dayjs().toISOString(),
   });
+  if (input.location) {
+    applyLocationToRecord(created, input.location);
+  }
   await created.save();
   return created;
 }
@@ -207,6 +216,17 @@ async function createExpenseFromPayment(
     upiResponseCode: payment.upiResponseCode,
     expenseSource: "EXPENZO_UPI_INTENT",
   });
+  if (
+    typeof payment.latitude === "number" &&
+    typeof payment.longitude === "number" &&
+    payment.locationCapturedAt
+  ) {
+    applyLocationToRecord(expense, {
+      latitude: payment.latitude,
+      longitude: payment.longitude,
+      locationCapturedAt: payment.locationCapturedAt,
+    });
+  }
   await expense.save();
   payment.expenseId = expenseId;
   await payment.save();
@@ -259,6 +279,9 @@ export async function applyUpiIntentResult(
   if (input.responseCode && !payment.upiResponseCode) {
     payment.upiResponseCode = input.responseCode.slice(0, 16);
   }
+  if (input.location) {
+    applyLocationToRecord(payment, input.location);
+  }
 
   payment.status = transition.status;
   payment.returnedAt = payment.returnedAt ?? dayjs().toISOString();
@@ -270,6 +293,14 @@ export async function applyUpiIntentResult(
   let expenseId = payment.expenseId;
   if (shouldCreateExpense(payment.status)) {
     expenseId = await createExpenseFromPayment(payment);
+    // If expense already existed from an earlier callback, still attach location when provided.
+    if (input.location && expenseId) {
+      const expense = await Transaction.findOne({ id: expenseId }).exec();
+      if (expense && (expense.latitude == null || expense.longitude == null)) {
+        applyLocationToRecord(expense, input.location);
+        await expense.save();
+      }
+    }
   }
 
   return {

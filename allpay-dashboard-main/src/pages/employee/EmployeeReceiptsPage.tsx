@@ -2,16 +2,18 @@ import CloudUpload from "@mui/icons-material/CloudUpload";
 import {
   Alert,
   Button,
-  Card,
-  CardContent,
   Chip,
   Stack,
   TextField,
-  Typography,
 } from "@mui/material";
 import dayjs from "dayjs";
 import { useMemo, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
+import {
+  AdminCard,
+  AdminEmptyState,
+  AdminPage,
+} from "../../components/admin/ui";
 import { AllOptionSelect } from "../../components/filters/AllOptionSelect";
 import { ReceiptCard, ReceiptGrid } from "../../components/receipts/ReceiptCard";
 import { useEmployeeData } from "../../context/EmployeeDataContext";
@@ -72,70 +74,60 @@ export function EmployeeReceiptsPage() {
   }, [transactions, paymentProofs, search, status]);
 
   return (
-    <Stack spacing={2.5}>
+    <AdminPage
+      title="My receipts"
+      description="Bills and payment proofs you uploaded. Finance reviews the same files from the admin receipts workspace."
+      actions={
+        <Button
+          component={RouterLink}
+          to="/employee/payment-proof"
+          variant="contained"
+          startIcon={<CloudUpload />}
+        >
+          Upload a receipt
+        </Button>
+      }
+    >
       {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
 
-      <Card sx={{ borderRadius: 3 }}>
-        <CardContent>
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={2} justifyContent="space-between">
-            <div>
-              <Typography variant="h5" fontWeight={800}>
-                My receipts
-              </Typography>
-              <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-                Bills and payment proofs you uploaded. Finance reviews these from the admin receipts dashboard.
-              </Typography>
-            </div>
-            <Button
-              component={RouterLink}
-              to="/employee/payment-proof"
-              variant="contained"
-              startIcon={<CloudUpload />}
-              sx={{ textTransform: "none", alignSelf: { sm: "center" } }}
-            >
-              Upload a receipt
-            </Button>
-          </Stack>
-          <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} sx={{ mt: 2 }}>
-            <TextField
-              size="small"
-              placeholder="Search merchant or receipt"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              sx={{ flex: 1, minWidth: 220 }}
-            />
-            <AllOptionSelect
-              label="Status"
-              allLabel="All statuses"
-              value={status}
-              onChange={setStatus}
-              minWidth={160}
-              options={[
-                { value: "pending", label: "pending" },
-                { value: "approved", label: "approved" },
-                { value: "rejected", label: "rejected" },
-                { value: "flagged", label: "flagged" },
-              ]}
-            />
-            <Chip label={`${items.length} receipts`} />
-          </Stack>
-        </CardContent>
-      </Card>
+      <AdminCard title="Filters">
+        <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems={{ md: "center" }}>
+          <TextField
+            size="small"
+            placeholder="Search merchant or receipt"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            sx={{ flex: 1, minWidth: 220 }}
+          />
+          <AllOptionSelect
+            label="Status"
+            allLabel="All statuses"
+            value={status}
+            onChange={setStatus}
+            minWidth={160}
+            options={[
+              { value: "pending", label: "Pending" },
+              { value: "approved", label: "Approved" },
+              { value: "rejected", label: "Rejected" },
+              { value: "flagged", label: "Flagged" },
+            ]}
+          />
+          <Chip label={`${items.length} receipts`} size="small" />
+        </Stack>
+      </AdminCard>
 
       {items.length === 0 ? (
-        <Card sx={{ borderRadius: 3 }}>
-          <CardContent>
-            <Typography fontWeight={700} gutterBottom>
-              No receipts yet
-            </Typography>
-            <Typography color="text.secondary" sx={{ mb: 2 }}>
-              Upload a screenshot or bill from Payment proof. It will show up here and on the admin receipts dashboard.
-            </Typography>
-            <Button component={RouterLink} to="/employee/payment-proof" variant="contained" sx={{ textTransform: "none" }}>
-              Submit payment proof
-            </Button>
-          </CardContent>
-        </Card>
+        <AdminCard>
+          <AdminEmptyState
+            title="No receipts yet"
+            description="Upload a screenshot or bill from Payment proof. It will show here and on the admin receipts dashboard."
+            action={
+              <Button component={RouterLink} to="/employee/payment-proof" variant="contained">
+                Submit payment proof
+              </Button>
+            }
+          />
+        </AdminCard>
       ) : (
         <ReceiptGrid>
           {items.map((item) => (
@@ -143,6 +135,6 @@ export function EmployeeReceiptsPage() {
           ))}
         </ReceiptGrid>
       )}
-    </Stack>
+    </AdminPage>
   );
 }

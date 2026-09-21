@@ -3,6 +3,8 @@ import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import React, {useEffect, useState} from 'react';
 import {Image, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {
+  ErrorState,
+  InfoBanner,
   PrimaryButton,
   Screen,
   ScreenHeader,
@@ -18,6 +20,7 @@ import {
   openUpiAppHome,
   upiQrImageUrl,
 } from '../upi/payment/UpiPaymentLauncher';
+import {colors, radius, shadow, spacing} from '../theme/tokens';
 
 type Route = RouteProp<RootStackParamList, 'PaymentQrPay'>;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -48,7 +51,7 @@ export const PaymentQrPayScreen = () => {
     return (
       <Screen safeTop={false}>
         <View style={styles.centered}>
-          <Text style={styles.body}>Payment not found.</Text>
+          <ErrorState title="Payment not found" />
         </View>
       </Screen>
     );
@@ -95,27 +98,26 @@ export const PaymentQrPayScreen = () => {
 
   return (
     <Screen safeTop={false}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <ScreenHeader
           title="Scan to pay"
           subtitle={`${payment.payeeName} · ₹${paiseToRupeeLabel(payment.amountPaise)}`}
         />
 
-        <View style={styles.infoBox}>
-          <Text style={styles.infoTitle}>Why scan instead of auto-pay?</Text>
-          <Text style={styles.infoBody}>
-            SBI and other banks often block auto-fill links to personal UPI IDs with
-            “UPI risk policy” after PIN. Scanning this QR inside {appName} is the same
-            as scanning the person’s original QR — that path works.
-          </Text>
-        </View>
+        <InfoBanner tone="info" title="Why scan instead of auto-pay?">
+          SBI and other banks often block auto-fill links to personal UPI IDs with “UPI risk
+          policy” after PIN. Scanning this QR inside {appName} is the same as scanning the person’s
+          original QR — that path works.
+        </InfoBanner>
 
         <Section title="Payment QR">
-          <Image
-            source={{uri: upiQrImageUrl(upiUri, 260)}}
-            style={styles.qrImage}
-            accessibilityLabel="Payment QR code"
-          />
+          <View style={styles.qrWrap}>
+            <Image
+              source={{uri: upiQrImageUrl(upiUri, 260)}}
+              style={styles.qrImage}
+              accessibilityLabel="Payment QR code"
+            />
+          </View>
           <Text style={styles.steps}>
             1. Open {appName} → Scan & Pay{'\n'}
             2. Scan this QR on your screen{'\n'}
@@ -128,6 +130,7 @@ export const PaymentQrPayScreen = () => {
           label={opening ? 'Opening…' : `Open ${appName}`}
           onPress={onOpenApp}
           disabled={opening}
+          loading={opening}
         />
         <PrimaryButton
           label="I paid — record expense"
@@ -147,47 +150,35 @@ export const PaymentQrPayScreen = () => {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 18,
+    padding: spacing.page,
     paddingBottom: 24,
     flexGrow: 1,
-    gap: 10,
   },
   centered: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    padding: spacing.page,
   },
-  infoBox: {
-    backgroundColor: '#eff6ff',
-    borderColor: '#bfdbfe',
+  qrWrap: {
+    alignSelf: 'center',
+    backgroundColor: colors.paper,
+    borderRadius: radius.lg,
+    padding: spacing.md,
     borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-    gap: 6,
-  },
-  infoTitle: {
-    color: '#0f172a',
-    fontWeight: '800',
-    fontSize: 14,
-  },
-  infoBody: {
-    color: '#334155',
-    fontSize: 13,
-    lineHeight: 19,
+    borderColor: colors.border,
+    marginVertical: spacing.sm,
+    ...shadow.card,
   },
   qrImage: {
     width: 260,
     height: 260,
-    alignSelf: 'center',
-    marginVertical: 8,
   },
   steps: {
-    color: '#475569',
+    color: colors.textSecondary,
     fontSize: 13,
     lineHeight: 22,
     textAlign: 'center',
-  },
-  body: {
-    color: '#334155',
+    marginTop: spacing.sm,
   },
 });

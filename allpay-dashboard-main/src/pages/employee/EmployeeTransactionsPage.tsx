@@ -2,8 +2,6 @@ import FilterList from "@mui/icons-material/FilterList";
 import WarningAmber from "@mui/icons-material/WarningAmber";
 import {
   Alert,
-  Card,
-  CardContent,
   Chip,
   Stack,
   Table,
@@ -16,10 +14,17 @@ import {
 } from "@mui/material";
 import dayjs from "dayjs";
 import { Link as RouterLink } from "react-router-dom";
+import {
+  AdminCard,
+  AdminEmptyState,
+  AdminPage,
+  AdminTableShell,
+} from "../../components/admin/ui";
 import { AllOptionSelect } from "../../components/filters/AllOptionSelect";
 import { useEmployeeData } from "../../context/EmployeeDataContext";
+import { ADMIN, ADMIN_FILTER_FIELD_SX } from "../../theme";
 
-const fmt = (value: number) => `Rs.${value.toLocaleString("en-IN")}`;
+const fmt = (value: number) => `₹${value.toLocaleString("en-IN")}`;
 
 export function EmployeeTransactionsPage() {
   const { filteredTransactions, transactions, statusFilter, setStatusFilter, search, setSearch, errorMessage } =
@@ -27,54 +32,58 @@ export function EmployeeTransactionsPage() {
   const total = filteredTransactions.reduce((acc, tx) => acc + tx.amount, 0);
 
   return (
-    <Stack spacing={2.5}>
-      <Card sx={{ borderRadius: 3 }}>
-        <CardContent>
-          <Typography variant="h5" fontWeight={800} gutterBottom>
-            My transactions
-          </Typography>
-          <Typography color="text.secondary">
-            Same fields as admin Transactions (merchant, MCC category, UPI app, amounts, status). You cannot approve or
-            reject — finance does that in the admin workspace.
-          </Typography>
-        </CardContent>
-      </Card>
-
+    <AdminPage
+      title="My transactions"
+      description="Payment records for your account. Finance approves or rejects reimbursement from the admin Transactions screen — a recorded payment is not an approved claim."
+    >
       {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
 
-      <Card sx={{ borderRadius: 3 }}>
-        <CardContent>
-          <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems={{ md: "center" }} sx={{ mb: 2 }}>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <FilterList color="action" />
-              <Typography fontWeight={700}>Filters</Typography>
-            </Stack>
-            <AllOptionSelect
-              label="Status"
-              allLabel="All"
-              value={statusFilter}
-              onChange={setStatusFilter}
-              minWidth={160}
-              options={[
-                { value: "pending", label: "pending" },
-                { value: "approved", label: "approved" },
-                { value: "rejected", label: "rejected" },
-                { value: "flagged", label: "flagged" },
-              ]}
-            />
-            <TextField
-              size="small"
-              placeholder="Search merchant / ref / id"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              sx={{ flex: 1, minWidth: 220 }}
-            />
+      <AdminCard title="Filters">
+        <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems={{ md: "center" }}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <FilterList color="action" fontSize="small" />
+            <Typography fontWeight={700} variant="body2">
+              Narrow results
+            </Typography>
           </Stack>
+          <AllOptionSelect
+            label="Status"
+            allLabel="All statuses"
+            value={statusFilter}
+            onChange={setStatusFilter}
+            minWidth={160}
+            options={[
+              { value: "pending", label: "Pending" },
+              { value: "approved", label: "Approved" },
+              { value: "rejected", label: "Rejected" },
+              { value: "flagged", label: "Flagged" },
+            ]}
+          />
+          <TextField
+            size="small"
+            placeholder="Search merchant, reference, or ID"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            sx={{ flex: 1, ...ADMIN_FILTER_FIELD_SX }}
+          />
+        </Stack>
+      </AdminCard>
 
-          <Alert severity="info" sx={{ mb: 2 }}>
-            Showing {filteredTransactions.length} of {transactions.length} records · Total amount {fmt(total)}
-          </Alert>
+      <Alert severity="info" sx={{ borderRadius: 1 }}>
+        Showing {filteredTransactions.length} of {transactions.length} records · Total{" "}
+        {fmt(total)}
+      </Alert>
 
+      <AdminCard title="Transactions" variant="flush">
+        <AdminTableShell
+          isEmpty={filteredTransactions.length === 0}
+          empty={
+            <AdminEmptyState
+              title="No matching transactions"
+              description="Try another status filter or clear search. New expenses appear after mobile Scan & Pay or payment proof upload."
+            />
+          }
+        >
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -92,7 +101,7 @@ export function EmployeeTransactionsPage() {
                   <TableCell>
                     <Typography fontWeight={600}>{tx.merchantName}</Typography>
                     <Typography variant="caption" color="text.secondary">
-                      {tx.upiRefId}
+                      {tx.upiRefId || "—"}
                     </Typography>
                   </TableCell>
                   <TableCell>{tx.category}</TableCell>
@@ -102,8 +111,17 @@ export function EmployeeTransactionsPage() {
                     <Chip
                       size="small"
                       label={tx.status}
-                      color={tx.status === "flagged" ? "warning" : tx.status === "approved" ? "success" : "default"}
+                      color={
+                        tx.status === "flagged"
+                          ? "warning"
+                          : tx.status === "approved"
+                            ? "success"
+                            : tx.status === "rejected"
+                              ? "error"
+                              : "default"
+                      }
                       icon={tx.status === "flagged" ? <WarningAmber /> : undefined}
+                      sx={{ borderRadius: `${ADMIN.radius.sm}px` }}
                     />
                   </TableCell>
                   <TableCell align="right">
@@ -112,15 +130,15 @@ export function EmployeeTransactionsPage() {
                       to={`/employee/transaction/${tx.id}`}
                       sx={{ color: "primary.main", fontWeight: 700, textDecoration: "none" }}
                     >
-                      VIEW
+                      View
                     </Typography>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
-    </Stack>
+        </AdminTableShell>
+      </AdminCard>
+    </AdminPage>
   );
 }

@@ -1,5 +1,7 @@
 export function createUuid(): string {
-  const cryptoObj = globalThis.crypto as {randomUUID?: () => string} | undefined;
+  const cryptoObj = (globalThis as typeof globalThis & {
+    crypto?: {randomUUID?: () => string};
+  }).crypto;
   if (cryptoObj?.randomUUID) {
     return cryptoObj.randomUUID();
   }

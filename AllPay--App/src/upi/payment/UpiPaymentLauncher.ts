@@ -1,6 +1,5 @@
 import {Linking, NativeModules, Platform} from 'react-native';
 import {KNOWN_UPI_APPS} from '../../constants/mockData';
-import {detectInstalledUpiApps} from '../../services/upiApps';
 
 type NativePayResult = {
   cancelled?: boolean;

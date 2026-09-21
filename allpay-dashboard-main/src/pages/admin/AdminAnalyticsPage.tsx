@@ -1,18 +1,19 @@
 import { lazy, Suspense, useMemo, useState } from "react";
-import {
-  Alert,
-  Box,
-  Chip,
-  CircularProgress,
-  Stack,
-  Typography,
-} from "@mui/material";
+import { Alert, Box, Chip, Stack, Typography } from "@mui/material";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import { adminApi } from "../../api/adminApi";
-import { PageHeader } from "../../components/layout/PageHeader";
+import {
+  AdminCard,
+  AdminKpi,
+  AdminKpiRow,
+  AdminPage,
+  AdminPageLoader,
+  AdminSegmentedControl,
+} from "../../components/admin/ui";
 import { useAdminData } from "../../context/AdminDataContext";
 import { adminKeys } from "../../query/adminKeys";
+import { ADMIN } from "../../theme";
 import { inr } from "../../utils/labels";
 
 const AdminAnalyticsCharts = lazy(() =>
@@ -24,74 +25,6 @@ const RANGE_OPTIONS = [
   { value: "30", label: "30D" },
   { value: "90", label: "90D" },
 ] as const;
-
-function PageLoader({ label = "Loading analytics…" }: { label?: string }) {
-  return (
-    <Stack
-      alignItems="center"
-      justifyContent="center"
-      spacing={1.5}
-      sx={{
-        minHeight: "58vh",
-        bgcolor: "#fff",
-        border: "1px solid",
-        borderColor: "divider",
-        borderRadius: 2,
-        px: 2,
-      }}
-    >
-      <CircularProgress size={36} thickness={4} />
-      <Typography variant="body2" color="text.secondary" fontWeight={650}>
-        {label}
-      </Typography>
-    </Stack>
-  );
-}
-
-function KpiCard({
-  label,
-  value,
-  hint,
-  accent,
-  delayClass,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  accent: string;
-  delayClass: string;
-}) {
-  return (
-    <Box
-      className={`claim-fade-up ${delayClass}`}
-      sx={{
-        flex: 1,
-        minWidth: 0,
-        bgcolor: "#fff",
-        borderLeft: "3px solid",
-        borderColor: accent,
-        px: 1.75,
-        py: 1.5,
-      }}
-    >
-      <Typography
-        variant="caption"
-        color="text.secondary"
-        sx={{ fontWeight: 650, letterSpacing: "0.04em", textTransform: "uppercase" }}
-      >
-        {label}
-      </Typography>
-      <Typography variant="h5" fontWeight={800} sx={{ mt: 0.5, letterSpacing: "-0.02em" }}>
-        {value}
-      </Typography>
-      {hint ? (
-        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.35 }}>
-          {hint}
-        </Typography>
-      ) : null}
-    </Box>
-  );
-}
 
 export const AdminAnalyticsPage = () => {
   const { transactions, filteredTransactions, departments } = useAdminData();
@@ -152,51 +85,21 @@ export const AdminAnalyticsPage = () => {
     totalWindowSpend > 0 ? Math.round(((kpis?.pendingSpend ?? 0) / totalWindowSpend) * 100) : 0;
 
   return (
-    <Stack spacing={2.25} className="claim-fade-up">
-      <PageHeader
-        title="Spend analytics"
-        description={`Server totals for the last ${range} days. Charts below let you drill into categories and employees.`}
-        actions={
-          <Stack
-            direction="row"
-            spacing={0.5}
-            sx={{
-              bgcolor: "#fff",
-              p: 0.5,
-              border: "1px solid",
-              borderColor: "divider",
-              opacity: showFullLoader ? 0.7 : 1,
-            }}
-          >
-            {RANGE_OPTIONS.map((opt) => {
-              const active = range === opt.value;
-              return (
-                <Box
-                  key={opt.value}
-                  component="button"
-                  disabled={showFullLoader}
-                  onClick={() => setRange(opt.value)}
-                  sx={{
-                    border: 0,
-                    cursor: showFullLoader ? "wait" : "pointer",
-                    px: 1.5,
-                    py: 0.65,
-                    fontSize: 13,
-                    fontWeight: 700,
-                    bgcolor: active ? "#111827" : "transparent",
-                    color: active ? "#fff" : "text.secondary",
-                  }}
-                >
-                  {opt.label}
-                </Box>
-              );
-            })}
-          </Stack>
-        }
-      />
-
+    <AdminPage
+      title="Spend analytics"
+      description={`Server totals for the last ${range} days. Charts below let you drill into categories and employees.`}
+      actions={
+        <AdminSegmentedControl
+          aria-label="Analytics range"
+          value={range}
+          options={RANGE_OPTIONS}
+          onChange={setRange}
+          disabled={showFullLoader}
+        />
+      }
+    >
       {showFullLoader ? (
-        <PageLoader label="Loading spend analytics…" />
+        <AdminPageLoader label="Loading spend analytics…" />
       ) : (
         <>
           {loadError ? <Alert severity="error">{loadError}</Alert> : null}
@@ -207,26 +110,22 @@ export const AdminAnalyticsPage = () => {
           ) : null}
 
           {today && !loadError ? (
-            <Box
+            <AdminCard
               className="claim-fade-up claim-fade-up-delay-1"
               sx={{
+                borderLeft: "3px solid",
+                borderLeftColor: today.totalSpend > 0 ? ADMIN.accent.primary : "#CBD5E1",
+              }}
+              contentSx={{
                 display: "grid",
                 gridTemplateColumns: { xs: "1fr", md: "auto 1fr auto" },
                 gap: 1.5,
                 alignItems: "center",
-                bgcolor: "#fff",
-                px: 2,
                 py: 1.5,
-                borderLeft: "3px solid",
-                borderColor: today.totalSpend > 0 ? "#2563EB" : "#CBD5E1",
               }}
             >
               <Box>
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ fontWeight: 650, textTransform: "uppercase", letterSpacing: "0.04em" }}
-                >
+                <Typography variant="overline" display="block">
                   Today
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -234,7 +133,7 @@ export const AdminAnalyticsPage = () => {
                 </Typography>
               </Box>
               <Box>
-                <Typography variant="h5" fontWeight={800} sx={{ letterSpacing: "-0.02em" }}>
+                <Typography variant="h5" sx={{ letterSpacing: "-0.02em" }}>
                   {inr(today.totalSpend)}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -254,40 +153,40 @@ export const AdminAnalyticsPage = () => {
                   <Chip size="small" variant="outlined" label="Quiet day" />
                 )}
               </Box>
-            </Box>
+            </AdminCard>
           ) : null}
 
           {!loadError ? (
-            <Stack direction={{ xs: "column", md: "row" }} spacing={1.25}>
-              <KpiCard
-                label="Approved"
-                value={inr(kpis?.approvedSpend ?? 0)}
-                hint={totalWindowSpend > 0 ? `${approvedPct}% of window spend` : "No spend in window"}
-                accent="#059669"
-                delayClass="claim-fade-up-delay-1"
-              />
-              <KpiCard
-                label="Pending"
-                value={inr(kpis?.pendingSpend ?? 0)}
-                hint={totalWindowSpend > 0 ? `${pendingPct}% awaiting review` : undefined}
-                accent="#D97706"
-                delayClass="claim-fade-up-delay-2"
-              />
-              <KpiCard
-                label="Rejected"
-                value={inr(kpis?.rejectedAmount ?? 0)}
-                hint="Amount declined"
-                accent="#94A3B8"
-                delayClass="claim-fade-up-delay-3"
-              />
-              <KpiCard
-                label="Flagged"
-                value={String(kpis?.flaggedCount ?? 0)}
-                hint="Claims needing attention"
-                accent="#DC2626"
-                delayClass="claim-fade-up-delay-4"
-              />
-            </Stack>
+            <Box>
+              <AdminKpiRow>
+                <Box className="claim-fade-up claim-fade-up-delay-1" sx={{ flex: 1, minWidth: 0 }}>
+                  <AdminKpi label="Approved" value={inr(kpis?.approvedSpend ?? 0)} accent="success" />
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5, px: 0.25 }}>
+                    {totalWindowSpend > 0 ? `${approvedPct}% of window spend` : "No spend in window"}
+                  </Typography>
+                </Box>
+                <Box className="claim-fade-up claim-fade-up-delay-2" sx={{ flex: 1, minWidth: 0 }}>
+                  <AdminKpi label="Pending" value={inr(kpis?.pendingSpend ?? 0)} accent="warning" />
+                  {totalWindowSpend > 0 ? (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5, px: 0.25 }}>
+                      {`${pendingPct}% awaiting review`}
+                    </Typography>
+                  ) : null}
+                </Box>
+                <Box className="claim-fade-up claim-fade-up-delay-3" sx={{ flex: 1, minWidth: 0 }}>
+                  <AdminKpi label="Rejected" value={inr(kpis?.rejectedAmount ?? 0)} accent="slate" />
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5, px: 0.25 }}>
+                    Amount declined
+                  </Typography>
+                </Box>
+                <Box className="claim-fade-up claim-fade-up-delay-4" sx={{ flex: 1, minWidth: 0 }}>
+                  <AdminKpi label="Flagged" value={String(kpis?.flaggedCount ?? 0)} accent="error" />
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5, px: 0.25 }}>
+                    Claims needing attention
+                  </Typography>
+                </Box>
+              </AdminKpiRow>
+            </Box>
           ) : null}
 
           {drillKey ? (
@@ -305,7 +204,7 @@ export const AdminAnalyticsPage = () => {
           ) : null}
 
           {!loadError ? (
-            <Suspense fallback={<PageLoader label="Loading charts…" />}>
+            <Suspense fallback={<AdminPageLoader label="Loading charts…" />}>
               <AdminAnalyticsCharts
                 byCategory={byCategory}
                 transactions={transactions}
@@ -317,6 +216,6 @@ export const AdminAnalyticsPage = () => {
           ) : null}
         </>
       )}
-    </Stack>
+    </AdminPage>
   );
 };

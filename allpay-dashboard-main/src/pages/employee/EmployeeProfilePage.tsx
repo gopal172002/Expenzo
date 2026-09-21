@@ -1,35 +1,17 @@
 import PersonOutline from "@mui/icons-material/PersonOutline";
-import { Box, Card, CardContent, Chip, Divider, Stack, Typography } from "@mui/material";
+import { Chip, Divider, Stack, Typography } from "@mui/material";
+import { AdminCard, AdminPage } from "../../components/admin/ui";
 import { useAuth } from "../../context/AuthContext";
 import { useEmployeeData } from "../../context/EmployeeDataContext";
-
-const profileFont = '"Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+import { ADMIN } from "../../theme";
 
 function ProfileRow({ label, value }: { label: string; value: string }) {
   return (
     <Stack direction="row" spacing={1.5} alignItems="baseline" sx={{ py: 1.1 }}>
-      <Typography
-        component="span"
-        sx={{
-          fontFamily: profileFont,
-          fontSize: 15,
-          fontWeight: 700,
-          color: "#111827",
-          lineHeight: 1.5,
-        }}
-      >
-        {label}:
+      <Typography variant="body2" fontWeight={700} color="text.secondary" sx={{ minWidth: 120 }}>
+        {label}
       </Typography>
-      <Typography
-        component="span"
-        sx={{
-          fontFamily: profileFont,
-          fontSize: 15,
-          fontWeight: 400,
-          color: "#111827",
-          lineHeight: 1.5,
-        }}
-      >
+      <Typography variant="body1" fontWeight={600}>
         {value}
       </Typography>
     </Stack>
@@ -45,113 +27,54 @@ export function EmployeeProfilePage() {
   const employeeId = employee?.id ?? user?.employeeId ?? "—";
   const department = employee?.department ?? user?.employeeDepartment ?? "—";
   const role = employee?.role ?? user?.employeeRole ?? "employee";
+  const company = "Your company";
 
   return (
-    <Stack spacing={2.5} maxWidth={720}>
-      <Card sx={{ borderRadius: 3 }}>
-        <CardContent>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-            <PersonOutline sx={{ color: "#5A58F2", fontSize: 22 }} />
-            <Typography
-              sx={{
-                fontFamily: profileFont,
-                fontSize: 24,
-                fontWeight: 700,
-                color: "#111827",
-                lineHeight: 1.3,
-              }}
-            >
-              Directory profile
-            </Typography>
+    <AdminPage
+      title="Profile"
+      description="Directory details finance sees under Employees. This view is read-only."
+    >
+      <AdminCard
+        title={
+          <Stack direction="row" spacing={1} alignItems="center">
+            <PersonOutline color="primary" fontSize="small" />
+            <Typography variant="h6">Account</Typography>
           </Stack>
-          <Typography
-            sx={{
-              fontFamily: profileFont,
-              fontSize: 14,
-              fontWeight: 400,
-              color: "#6b7280",
-              lineHeight: 1.55,
-            }}
-          >
-            Same fields finance sees under admin{" "}
-            <Box component="span" sx={{ fontWeight: 700, color: "#6b7280" }}>
-              Employees
-            </Box>{" "}
-            (read-only here).
-          </Typography>
-        </CardContent>
-      </Card>
+        }
+        description={`${company} · AllPay employee portal`}
+      >
+        <ProfileRow label="Name" value={name} />
+        <Divider />
+        <ProfileRow label="Email" value={email} />
+        <Divider />
+        <ProfileRow label="Employee ID" value={employeeId} />
+        <Divider />
+        <ProfileRow label="Department" value={department} />
+        <Divider />
+        <ProfileRow label="Role" value={role} />
 
-      <Card sx={{ borderRadius: 3 }}>
-        <CardContent>
-          <ProfileRow label="Name" value={name} />
-          <Divider />
-          <ProfileRow label="Email" value={email} />
-          <Divider />
-          <ProfileRow label="Employee id" value={employeeId} />
-          <Divider />
-          <ProfileRow label="Department" value={department} />
-          <Divider />
-          <ProfileRow label="Role in directory" value={role} />
-
-          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 3 }}>
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 3 }}>
+          <Chip
+            label="Active"
+            size="small"
+            sx={{ bgcolor: ADMIN.accent.success, color: "#fff", fontWeight: 600 }}
+          />
+          {employee?.onboarded ? (
             <Chip
-              label="Active"
-              sx={{
-                fontFamily: profileFont,
-                fontSize: 13,
-                fontWeight: 400,
-                bgcolor: "#22c55e",
-                color: "#fff",
-                height: 28,
-                borderRadius: "999px",
-              }}
+              label="Onboarding complete"
+              size="small"
+              sx={{ bgcolor: ADMIN.accent.primary, color: "#fff", fontWeight: 600 }}
             />
-            {employee?.onboarded ? (
-              <Chip
-                label="Onboarding complete"
-                sx={{
-                  fontFamily: profileFont,
-                  fontSize: 13,
-                  fontWeight: 400,
-                  bgcolor: "#5A58F2",
-                  color: "#fff",
-                  height: 28,
-                  borderRadius: "999px",
-                }}
-              />
-            ) : (
-              <Chip
-                label="Onboarding pending"
-                variant="outlined"
-                sx={{ fontFamily: profileFont, fontSize: 13, fontWeight: 400, height: 28 }}
-              />
-            )}
-            {employee?.travelApproved ? (
-              <Chip
-                label="Travel approved"
-                variant="outlined"
-                sx={{
-                  fontFamily: profileFont,
-                  fontSize: 13,
-                  fontWeight: 400,
-                  color: "#64748b",
-                  borderColor: "#d1d9e0",
-                  bgcolor: "#fff",
-                  height: 28,
-                  borderRadius: "999px",
-                }}
-              />
-            ) : (
-              <Chip
-                label="Travel not approved"
-                variant="outlined"
-                sx={{ fontFamily: profileFont, fontSize: 13, fontWeight: 400, height: 28 }}
-              />
-            )}
-          </Stack>
-        </CardContent>
-      </Card>
-    </Stack>
+          ) : (
+            <Chip label="Onboarding pending" size="small" variant="outlined" />
+          )}
+          {employee?.travelApproved ? (
+            <Chip label="Travel approved" size="small" variant="outlined" />
+          ) : (
+            <Chip label="Travel not approved" size="small" variant="outlined" />
+          )}
+        </Stack>
+      </AdminCard>
+    </AdminPage>
   );
 }

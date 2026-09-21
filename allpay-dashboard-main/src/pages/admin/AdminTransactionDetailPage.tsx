@@ -2,47 +2,42 @@ import ArrowBack from "@mui/icons-material/ArrowBack";
 import CheckCircleOutline from "@mui/icons-material/CheckCircleOutline";
 import ContentCopy from "@mui/icons-material/ContentCopy";
 import HighlightOff from "@mui/icons-material/HighlightOff";
-import LocationOnOutlined from "@mui/icons-material/LocationOnOutlined";
 import Print from "@mui/icons-material/Print";
 import UploadFile from "@mui/icons-material/UploadFile";
 import {
   Alert,
   Box,
   Button,
-  Card,
-  CardContent,
-  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  Link,
   Stack,
   TextField,
   Typography,
 } from "@mui/material";
 import dayjs from "dayjs";
-import { useCallback, useMemo, useRef, useState } from "react";
-import { Link as RouterLink, useLocation, useNavigate, useParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { adminApi } from "../../api/adminApi";
+import { AdminStatusChip } from "../../components/admin/AdminStatusChip";
+import {
+  PaymentLocationMap,
+  type PaymentLocationCoords,
+} from "../../components/admin/PaymentLocationMap";
 import { ReceiptFraudScoreChip } from "../../components/admin/ReceiptFraudScoreChip";
+import { AdminBreadcrumbs, AdminCard, AdminEmptyState, AdminPage } from "../../components/admin/ui";
 import { ReceiptImage } from "../../components/receipts/ReceiptImage";
 import { ClaimQueryThread } from "../../components/verification/ClaimQueryThread";
 import { ClaimReviewInsight } from "../../components/verification/ClaimReviewInsight";
 import { VerificationPanel, VerificationScoreChip } from "../../components/verification/VerificationPanel";
 import { useAdminData } from "../../context/AdminDataContext";
-import type { ClaimTicket, TransactionStatus, VerificationResult } from "../../types";
+import { ADMIN } from "../../theme";
+import type { ClaimTicket, VerificationResult } from "../../types";
 import { inr, statusLabel } from "../../utils/labels";
 
 function isSafeInternalPath(value: unknown): value is string {
   return typeof value === "string" && value.startsWith("/") && !value.startsWith("//");
-}
-
-function statusColor(status: TransactionStatus): "default" | "success" | "error" | "warning" | "info" {
-  if (status === "approved") return "success";
-  if (status === "rejected") return "error";
-  if (status === "flagged") return "warning";
-  return "default";
 }
 
 function FieldGrid({
@@ -64,7 +59,10 @@ function FieldGrid({
           sx={{
             py: 0.85,
             px: 1,
-            bgcolor: "#F9FAFB",
+            bgcolor: ADMIN.surface.muted,
+            borderRadius: 1,
+            border: "1px solid",
+            borderColor: "divider",
             minWidth: 0,
           }}
         >
@@ -77,7 +75,7 @@ function FieldGrid({
           </Typography>
           <Typography
             variant="body2"
-            fontWeight={650}
+            fontWeight={600}
             sx={{
               mt: 0.2,
               wordBreak: "break-word",
@@ -93,75 +91,31 @@ function FieldGrid({
   );
 }
 
-function MapPlaceholder() {
-  return (
-    <Box
-      sx={{
-        position: "relative",
-        mt: 1,
-        minHeight: 200,
-        height: "calc(100% - 36px)",
-        overflow: "hidden",
-        bgcolor: "#E8EEF7",
-        backgroundImage: `
-          linear-gradient(rgba(148,163,184,0.25) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(148,163,184,0.25) 1px, transparent 1px)
-        `,
-        backgroundSize: "28px 28px",
-      }}
-    >
-      <Box
-        sx={{
-          position: "absolute",
-          inset: "18% 22% 28% 18%",
-          borderRadius: "40% 60% 55% 45%",
-          bgcolor: "rgba(148, 163, 184, 0.22)",
-        }}
-      />
-      <Box
-        sx={{
-          position: "absolute",
-          inset: "40% 30% 22% 35%",
-          borderRadius: "50%",
-          bgcolor: "rgba(100, 116, 139, 0.18)",
-        }}
-      />
-      <Box
-        className="claim-map-pin"
-        sx={{
-          position: "absolute",
-          left: "52%",
-          top: "46%",
-          color: "#DC2626",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-        }}
-      >
-        <LocationOnOutlined sx={{ fontSize: 36, filter: "drop-shadow(0 2px 2px rgba(0,0,0,0.15))" }} />
-      </Box>
-      <Box
-        sx={{
-          position: "absolute",
-          left: 12,
-          right: 12,
-          bottom: 12,
-          px: 1.25,
-          py: 1,
-          bgcolor: "rgba(255,255,255,0.92)",
-          border: "1px solid",
-          borderColor: "divider",
-        }}
-      >
-        <Typography variant="body2" fontWeight={700}>
-          Location unavailable
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          Coordinates will appear here when the mobile capture includes GPS.
-        </Typography>
-      </Box>
-    </Box>
-  );
+function resolveCoords(input: {
+  latitude?: number | null;
+  longitude?: number | null;
+  locationCapturedAt?: string | null;
+  mobileLocation?: {
+    latitude: number;
+    longitude: number;
+    capturedAt: string;
+  } | null;
+}): PaymentLocationCoords | null {
+  const lat = input.latitude ?? input.mobileLocation?.latitude;
+  const lng = input.longitude ?? input.mobileLocation?.longitude;
+  if (
+    typeof lat !== "number" ||
+    typeof lng !== "number" ||
+    !Number.isFinite(lat) ||
+    !Number.isFinite(lng)
+  ) {
+    return null;
+  }
+  return {
+    latitude: lat,
+    longitude: lng,
+    locationCapturedAt: input.locationCapturedAt ?? input.mobileLocation?.capturedAt ?? null,
+  };
 }
 
 export const AdminTransactionDetailPage = () => {
@@ -189,11 +143,51 @@ export const AdminTransactionDetailPage = () => {
   const [approveAmount, setApproveAmount] = useState("");
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("Missing supporting bill");
+  const [paymentCoords, setPaymentCoords] = useState<PaymentLocationCoords | null>(null);
+  const [locationLoading, setLocationLoading] = useState(false);
 
   const verification = verificationOverride ?? transaction?.verification;
   const ticket = ticketOverride ?? transaction?.claimTicket;
-  const canDecide =
-    transaction?.status === "pending" || transaction?.status === "flagged";
+  const canDecide = transaction?.status === "pending" || transaction?.status === "flagged";
+
+  useEffect(() => {
+    if (!id) {
+      setPaymentCoords(null);
+      return;
+    }
+
+    const fromList = transaction ? resolveCoords(transaction) : null;
+    if (fromList) {
+      setPaymentCoords(fromList);
+    }
+
+    let cancelled = false;
+    setLocationLoading(true);
+    void adminApi
+      .getPayment(id)
+      .then((res) => {
+        if (cancelled) return;
+        const coords = resolveCoords({
+          latitude: res.latitude,
+          longitude: res.longitude,
+          locationCapturedAt: res.locationCapturedAt,
+          mobileLocation: res.mobileLocation ?? res.transaction?.mobileLocation ?? null,
+        });
+        setPaymentCoords(coords);
+      })
+      .catch(() => {
+        if (!cancelled && !fromList) {
+          setPaymentCoords(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLocationLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, transaction]);
 
   const openApprove = useCallback(() => {
     if (!transaction) return;
@@ -257,17 +251,6 @@ export const AdminTransactionDetailPage = () => {
     window.setTimeout(() => setCopied(false), 1600);
   }, [transaction]);
 
-  if (!transaction) {
-    return (
-      <Stack spacing={2}>
-        <Button startIcon={<ArrowBack />} onClick={goBack} sx={{ alignSelf: "flex-start", textTransform: "none" }}>
-          Back
-        </Button>
-        <Typography>Transaction not found.</Typography>
-      </Stack>
-    );
-  }
-
   const crumbParentTo = returnTo ?? "/admin";
   const crumbParentLabel = returnTo?.startsWith("/admin/transactions")
     ? "Transactions"
@@ -277,71 +260,53 @@ export const AdminTransactionDetailPage = () => {
         ? "Claim review"
         : "Latest receipts";
 
+  const breadcrumbs = (
+    <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
+      <Button size="small" startIcon={<ArrowBack />} onClick={goBack} variant="outlined">
+        Back
+      </Button>
+      <AdminBreadcrumbs
+        items={[
+          { label: crumbParentLabel, to: crumbParentTo },
+          { label: transaction?.id ?? id ?? "—" },
+        ]}
+      />
+    </Stack>
+  );
+
+  if (!transaction) {
+    return (
+      <AdminPage title="Transaction" breadcrumbs={breadcrumbs}>
+        <AdminEmptyState
+          title="Transaction not found"
+          description="It may have been removed, or you no longer have access."
+          action={
+            <Button variant="contained" onClick={goBack}>
+              Go back
+            </Button>
+          }
+        />
+      </AdminPage>
+    );
+  }
+
   const accent =
-    transaction.status === "flagged" || verification?.verdict === "needs_review" || verification?.verdict === "high_risk"
-      ? "#D97706"
+    transaction.status === "flagged" ||
+    verification?.verdict === "needs_review" ||
+    verification?.verdict === "high_risk"
+      ? ADMIN.accent.warning
       : transaction.status === "approved" || verification?.verdict === "verified"
-        ? "#059669"
+        ? ADMIN.accent.success
         : transaction.status === "rejected"
-          ? "#DC2626"
-          : "#2563EB";
+          ? ADMIN.accent.error
+          : ADMIN.accent.primary;
 
   return (
-    <Stack spacing={2} className="claim-fade-up">
-      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-        <Button startIcon={<ArrowBack />} onClick={goBack} sx={{ textTransform: "none" }}>
-          Back
-        </Button>
-        <Typography variant="body2" color="text.secondary" component="span">
-          <Link component={RouterLink} to={crumbParentTo} underline="hover" color="inherit">
-            {crumbParentLabel}
-          </Link>
-          {" / "}
-          {transaction.id}
-        </Typography>
-      </Stack>
-
-      <Box
-        className="claim-fade-up claim-fade-up-delay-1"
-        sx={{
-          display: "grid",
-          gridTemplateColumns: { xs: "1fr", lg: "1fr auto" },
-          gap: 2,
-          alignItems: "start",
-          pl: 1.5,
-          borderLeft: "3px solid",
-          borderColor: accent,
-        }}
-      >
-        <Box sx={{ minWidth: 0 }}>
-          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 0.75 }}>
-            <Chip size="small" color={statusColor(transaction.status)} label={statusLabel(transaction.status)} />
-            <VerificationScoreChip score={verification?.riskScore} verdict={verification?.verdict} />
-            <ReceiptFraudScoreChip
-              score={transaction.receiptFraudScore}
-              tier={transaction.receiptFraudTier}
-            />
-          </Stack>
-          <Typography variant="h5" fontWeight={800} sx={{ letterSpacing: "-0.02em" }}>
-            {transaction.merchantName}
-          </Typography>
-          <Typography variant="h6" fontWeight={700} color="text.primary" sx={{ mt: 0.25 }}>
-            {inr(transaction.claimedAmount)}
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
-            {transaction.employeeName} · {transaction.department} ·{" "}
-            {dayjs(transaction.dateTime).format("DD MMM YYYY, HH:mm")}
-          </Typography>
-          {transaction.adminDecision ? (
-            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
-              Decision: {transaction.adminDecision}
-              {transaction.adminDecisionAt
-                ? ` · ${dayjs(transaction.adminDecisionAt).format("DD MMM YYYY, HH:mm")}`
-                : ""}
-            </Typography>
-          ) : null}
-        </Box>
-
+    <AdminPage
+      title={transaction.merchantName}
+      description={`${transaction.employeeName} · ${transaction.department} · ${dayjs(transaction.dateTime).format("DD MMM YYYY, HH:mm")}`}
+      breadcrumbs={breadcrumbs}
+      actions={
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
           {canDecide ? (
             <>
@@ -351,7 +316,6 @@ export const AdminTransactionDetailPage = () => {
                 startIcon={<CheckCircleOutline />}
                 disabled={isSaving}
                 onClick={openApprove}
-                sx={{ textTransform: "none" }}
               >
                 Approve
               </Button>
@@ -361,28 +325,58 @@ export const AdminTransactionDetailPage = () => {
                 startIcon={<HighlightOff />}
                 disabled={isSaving}
                 onClick={openReject}
-                sx={{ textTransform: "none" }}
               >
                 Reject
               </Button>
             </>
           ) : null}
-          <Button startIcon={<ContentCopy />} onClick={() => void copyUpi()} sx={{ textTransform: "none" }}>
+          <Button startIcon={<ContentCopy />} onClick={() => void copyUpi()}>
             {copied ? "Copied" : "Copy UPI Ref"}
           </Button>
-          <Button variant="outlined" startIcon={<Print />} onClick={() => window.print()} sx={{ textTransform: "none" }}>
+          <Button variant="outlined" startIcon={<Print />} onClick={() => window.print()}>
             Print
           </Button>
         </Stack>
+      }
+      alert={
+        <>
+          {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
+          {verifyError ? (
+            <Alert severity="error" onClose={() => setVerifyError("")}>
+              {verifyError}
+            </Alert>
+          ) : null}
+        </>
+      }
+    >
+      <Box
+        className="claim-fade-up claim-fade-up-delay-1"
+        sx={{
+          pl: 1.5,
+          borderLeft: "3px solid",
+          borderColor: accent,
+        }}
+      >
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 0.75 }}>
+          <AdminStatusChip status={transaction.status} label={statusLabel(transaction.status)} />
+          <VerificationScoreChip score={verification?.riskScore} verdict={verification?.verdict} />
+          <ReceiptFraudScoreChip
+            score={transaction.receiptFraudScore}
+            tier={transaction.receiptFraudTier}
+          />
+        </Stack>
+        <Typography variant="h6" fontWeight={700} color="text.primary">
+          {inr(transaction.claimedAmount)}
+        </Typography>
+        {transaction.adminDecision ? (
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+            Decision: {transaction.adminDecision}
+            {transaction.adminDecisionAt
+              ? ` · ${dayjs(transaction.adminDecisionAt).format("DD MMM YYYY, HH:mm")}`
+              : ""}
+          </Typography>
+        ) : null}
       </Box>
-
-      {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
-
-      {verifyError ? (
-        <Alert severity="error" onClose={() => setVerifyError("")}>
-          {verifyError}
-        </Alert>
-      ) : null}
 
       <Box
         sx={{
@@ -392,66 +386,55 @@ export const AdminTransactionDetailPage = () => {
           alignItems: "stretch",
           "& > .MuiCard-root, & > .detail-panel > .MuiCard-root": {
             height: "100%",
-            border: 0,
-            borderRadius: 0,
-            boxShadow: "none",
-            bgcolor: "#fff",
-          },
-          "& .MuiCardContent-root": {
-            py: 1.75,
-            px: 1.75,
-            "&:last-child": { pb: 1.75 },
           },
         }}
       >
-        <Card className="claim-fade-up claim-fade-up-delay-1">
-          <CardContent>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-              <Typography variant="subtitle1" fontWeight={700}>
-                Receipt
-              </Typography>
-              <ReceiptFraudScoreChip
-                score={transaction.receiptFraudScore}
-                tier={transaction.receiptFraudTier}
-              />
-            </Stack>
-            {transaction.receiptUrl ? (
-              <ReceiptImage url={transaction.receiptUrl} alt={`${transaction.merchantName} receipt`} fit="width" />
-            ) : (
-              <Typography color="text.secondary" sx={{ py: 2 }}>
-                No receipt on file yet.
-              </Typography>
-            )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,application/pdf"
-              aria-label="Upload receipt image"
-              style={{ display: "none" }}
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                e.target.value = "";
-                if (!file || !id) return;
-                await uploadReceipt(id, file);
-              }}
+        <AdminCard className="claim-fade-up claim-fade-up-delay-1">
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+            <Typography variant="subtitle1" fontWeight={700}>
+              Receipt
+            </Typography>
+            <ReceiptFraudScoreChip
+              score={transaction.receiptFraudScore}
+              tier={transaction.receiptFraudTier}
             />
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<UploadFile />}
-              disabled={isSaving}
-              onClick={() => fileInputRef.current?.click()}
-              sx={{ mt: 1.5, textTransform: "none" }}
-            >
-              {isSaving ? "Uploading…" : "Replace receipt"}
-            </Button>
-            {errorMessage ? (
-              <Typography color="error" variant="body2" sx={{ mt: 1 }}>
-                {errorMessage}
-              </Typography>
-            ) : null}
-          </CardContent>
-        </Card>
+          </Stack>
+          {transaction.receiptUrl ? (
+            <ReceiptImage url={transaction.receiptUrl} alt={`${transaction.merchantName} receipt`} fit="width" />
+          ) : (
+            <Typography color="text.secondary" sx={{ py: 2 }}>
+              No receipt on file yet.
+            </Typography>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,application/pdf"
+            aria-label="Upload receipt image"
+            style={{ display: "none" }}
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (!file || !id) return;
+              await uploadReceipt(id, file);
+            }}
+          />
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<UploadFile />}
+            disabled={isSaving}
+            onClick={() => fileInputRef.current?.click()}
+            sx={{ mt: 1.5 }}
+          >
+            {isSaving ? "Uploading…" : "Replace receipt"}
+          </Button>
+          {errorMessage ? (
+            <Typography color="error" variant="body2" sx={{ mt: 1 }}>
+              {errorMessage}
+            </Typography>
+          ) : null}
+        </AdminCard>
 
         <Box className="detail-panel claim-fade-up claim-fade-up-delay-2" sx={{ minWidth: 0 }}>
           <VerificationPanel
@@ -461,45 +444,39 @@ export const AdminTransactionDetailPage = () => {
           />
         </Box>
 
-        <Card className="claim-fade-up claim-fade-up-delay-3">
-          <CardContent>
-            <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1.25 }}>
-              Claim details
-            </Typography>
-            <FieldGrid
-              items={[
-                { label: "Employee", value: transaction.employeeName },
-                { label: "Department", value: transaction.department },
-                { label: "Merchant", value: transaction.merchantName },
-                { label: "MCC", value: transaction.mcc || "—" },
-                { label: "UPI app", value: transaction.upiApp },
-                { label: "UPI reference", value: transaction.upiRefId, mono: true },
-                { label: "Captured amount", value: inr(transaction.amount) },
-                { label: "Claimed amount", value: inr(transaction.claimedAmount) },
-                { label: "Transaction time", value: dayjs(transaction.dateTime).format("DD MMM YYYY, HH:mm") },
-                { label: "Status", value: statusLabel(transaction.status) },
-                { label: "Decision", value: transaction.adminDecision || "Pending review" },
-                {
-                  label: "Decision time",
-                  value: transaction.adminDecisionAt
-                    ? dayjs(transaction.adminDecisionAt).format("DD MMM YYYY, HH:mm")
-                    : "—",
-                },
-              ]}
-            />
-          </CardContent>
-        </Card>
+        <AdminCard className="claim-fade-up claim-fade-up-delay-3" title="Claim details">
+          <FieldGrid
+            items={[
+              { label: "Employee", value: transaction.employeeName },
+              { label: "Department", value: transaction.department },
+              { label: "Merchant", value: transaction.merchantName },
+              { label: "MCC", value: transaction.mcc || "—" },
+              { label: "UPI app", value: transaction.upiApp },
+              { label: "UPI reference", value: transaction.upiRefId, mono: true },
+              { label: "Captured amount", value: inr(transaction.amount) },
+              { label: "Claimed amount", value: inr(transaction.claimedAmount) },
+              { label: "Transaction time", value: dayjs(transaction.dateTime).format("DD MMM YYYY, HH:mm") },
+              { label: "Status", value: statusLabel(transaction.status) },
+              { label: "Decision", value: transaction.adminDecision || "Pending review" },
+              {
+                label: "Decision time",
+                value: transaction.adminDecisionAt
+                  ? dayjs(transaction.adminDecisionAt).format("DD MMM YYYY, HH:mm")
+                  : "—",
+              },
+            ]}
+          />
+        </AdminCard>
 
-        <Card className="claim-fade-up claim-fade-up-delay-4">
-          <CardContent sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-            <Typography variant="subtitle1" fontWeight={700}>
-              Location
-            </Typography>
-            <Box sx={{ flex: 1, minHeight: 200 }}>
-              <MapPlaceholder />
-            </Box>
-          </CardContent>
-        </Card>
+        <AdminCard
+          className="claim-fade-up claim-fade-up-delay-4"
+          title="Payment location"
+          contentSx={{ height: "100%", display: "flex", flexDirection: "column" }}
+        >
+          <Box sx={{ flex: 1, minHeight: 220 }}>
+            <PaymentLocationMap coords={paymentCoords} loading={locationLoading && !paymentCoords} />
+          </Box>
+        </AdminCard>
       </Box>
 
       <ClaimQueryThread
@@ -591,6 +568,6 @@ export const AdminTransactionDetailPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </Stack>
+    </AdminPage>
   );
 };

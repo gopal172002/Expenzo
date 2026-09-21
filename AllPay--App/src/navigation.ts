@@ -1,7 +1,11 @@
 import {MerchantData} from './types';
 
 export type RootStackParamList = {
-  MainTabs: undefined;
+  MainTabs:
+    | undefined
+    | {
+        screen?: 'Home' | 'History' | 'Settings';
+      };
   Scan: undefined;
   Payment: {merchant: MerchantData};
   PaymentQrPay: {

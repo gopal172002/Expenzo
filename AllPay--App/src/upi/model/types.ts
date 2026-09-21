@@ -1,9 +1,9 @@
 /**
  * UPI Intent tracking types.
  *
- * Trust model: Expenzo only records what an external UPI app reported via
+ * Trust model: AllPay only records what an external UPI app reported via
  * Android Activity Result. SUCCESS_REPORTED is not bank/NPCI settlement
- * verification. Expenzo is not a PSP, TPAP, wallet, or payment gateway.
+ * verification. AllPay is not a PSP, TPAP, wallet, or payment gateway.
  */
 
 export const UPI_INTENT_STATUSES = [

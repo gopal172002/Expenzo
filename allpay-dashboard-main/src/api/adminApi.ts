@@ -123,6 +123,33 @@ export const adminApi = {
     return request<TransactionsListResponse>(`/admin/transactions${toQueryString(params)}`);
   },
 
+  /**
+   * Fetch a single payment/transaction including GPS snapshot fields.
+   * `id` may be a transaction id or paymentId.
+   */
+  async getPayment(id: string): Promise<{
+    ok: boolean;
+    payment?: Transaction;
+    transaction?: Transaction;
+    latitude: number | null;
+    longitude: number | null;
+    locationCapturedAt: string | null;
+    mobileLocation?: Transaction["mobileLocation"];
+  }> {
+    return request(`/admin/payments/${encodeURIComponent(id)}`);
+  },
+
+  async getTransaction(id: string): Promise<{
+    ok: boolean;
+    transaction: Transaction;
+    latitude: number | null;
+    longitude: number | null;
+    locationCapturedAt: string | null;
+    mobileLocation?: Transaction["mobileLocation"];
+  }> {
+    return request(`/admin/transactions/${encodeURIComponent(id)}`);
+  },
+
   async getDailySpend(dateYmd?: string): Promise<DailySpendResponse> {
     return request<DailySpendResponse>(
       `/admin/analytics/daily-spend${toQueryString(dateYmd ? { date: dateYmd } : undefined)}`

@@ -1,85 +1,301 @@
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {useNavigation} from '@react-navigation/native';
-import React from 'react';
-import {ScrollView, StyleSheet, Text, View} from 'react-native';
-import {PrimaryButton, Screen, ScreenHeader, Section, StatusPill} from '../components/UI';
+import React, {useMemo, useState} from 'react';
+import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {
+  ActionTile,
+  AppCard,
+  AppLogo,
+  Avatar,
+  EmptyState,
+  FadeIn,
+  OfflineSyncBanner,
+  PrimaryButton,
+  QuickAction,
+  Screen,
+  SectionHeader,
+  SummaryCard,
+  TransactionRow,
+} from '../components/UI';
 import {useAppData} from '../context/AppContext';
 import {RootStackParamList} from '../navigation';
+import {colors, radius, spacing, typography} from '../theme/tokens';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
+const formatInr = (n: number) =>
+  `₹${n.toLocaleString('en-IN', {maximumFractionDigits: 0})}`;
+
+const TABS = ['Overview', 'Pay', 'Activity', 'Sync'] as const;
+
 export const HomeScreen = () => {
   const navigation = useNavigation<Nav>();
-  const {profile, transactions, syncMessage} = useAppData();
-  const latest = transactions.slice(0, 3);
-  const totalPending = transactions.filter(item => item.status === 'Pending Approval').length;
-  const totalRecorded = transactions.filter(item => item.status === 'Recorded').length;
-  const totalAmount = transactions.reduce((sum, item) => sum + item.amount, 0);
+  const [tab, setTab] = useState<(typeof TABS)[number]>('Overview');
+  const {
+    profile,
+    transactions,
+    syncMessage,
+    isOnline,
+    lastSyncedAt,
+    queuedCount,
+    retrySync,
+    policies,
+    locationEnabled,
+  } = useAppData();
+
+  const latest = transactions.slice(0, 5);
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+  const monthSpend = useMemo(
+    () =>
+      transactions
+        .filter(item => new Date(item.timestamp).getTime() >= monthStart)
+        .reduce((sum, item) => sum + item.amount, 0),
+    [monthStart, transactions],
+  );
+
+  const pendingReimbursement = useMemo(
+    () =>
+      transactions
+        .filter(item => item.status === 'Pending Approval')
+        .reduce((sum, item) => sum + (item.reimbursementAmount ?? item.amount), 0),
+    [transactions],
+  );
+
+  const needsInfo = useMemo(
+    () =>
+      transactions.filter(
+        item =>
+          item.status === 'Flagged' ||
+          (item.status === 'Recorded' && item.receipts.length === 0),
+      ),
+    [transactions],
+  );
+
+  const syncHint = lastSyncedAt
+    ? `Synced ${new Date(lastSyncedAt).toLocaleDateString()}`
+    : 'Not synced yet';
+
+  const firstName = profile?.employeeName?.split(' ')[0] ?? 'there';
 
   return (
     <Screen safeBottom={false}>
-      <ScrollView contentContainerStyle={styles.container}>
-        <ScreenHeader
-          title={`Hello, ${profile?.employeeName ?? 'Employee'}`}
-          subtitle={`Employee ID ${profile?.employeeId ?? '--'} | ${profile?.department ?? '--'}`}
-        />
-
-        <View style={styles.metricsRow}>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricValue} numberOfLines={1}>
-              INR {totalAmount.toFixed(0)}
-            </Text>
-            <Text style={styles.metricLabel}>Total spend</Text>
-          </View>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricValue} numberOfLines={1}>
-              {totalRecorded}
-            </Text>
-            <Text style={styles.metricLabel}>Recorded</Text>
-          </View>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricValue} numberOfLines={1}>
-              {totalPending}
-            </Text>
-            <Text style={styles.metricLabel}>Pending approval</Text>
-          </View>
-        </View>
-
-        <Section title="Quick action">
-          <PrimaryButton
-            label="Scan & Pay"
-            onPress={() => navigation.navigate('Scan')}
-          />
-        </Section>
-
-        {syncMessage ? (
-          <View style={styles.syncBanner}>
-            <Text style={styles.syncText}>{syncMessage}</Text>
-          </View>
-        ) : null}
-
-        <Section title="Recent transactions">
-          {latest.length === 0 ? (
-            <Text style={styles.empty}>No transactions yet.</Text>
-          ) : (
-            latest.map(item => (
-              <View style={styles.row} key={item.id}>
-                <View style={styles.flexOne}>
-                  <Text style={styles.merchant} numberOfLines={1}>
-                    {item.merchant.name}
-                  </Text>
-                  <Text style={styles.meta}>
-                    {new Date(item.timestamp).toLocaleDateString()}
-                  </Text>
-                </View>
-                <View style={styles.rowRight}>
-                  <Text style={styles.amount}>INR {item.amount.toFixed(2)}</Text>
-                  <StatusPill status={item.status} />
-                </View>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        <FadeIn>
+          <View style={styles.topBar}>
+            <View style={styles.brandRow}>
+              <AppLogo size="sm" />
+              <View style={styles.brandText}>
+                <Text style={styles.brandTitle}>AllPay</Text>
+                <Text style={styles.brandSub} numberOfLines={1}>
+                  Hi, {firstName}
+                  {profile?.companyName ? ` · ${profile.companyName}` : ''}
+                </Text>
               </View>
-            ))
+            </View>
+            <View style={styles.topActions}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Open profile"
+                onPress={() => navigation.navigate('MainTabs', {screen: 'Settings'})}
+                hitSlop={4}>
+                <Avatar name={profile?.employeeName} size="sm" />
+              </Pressable>
+            </View>
+          </View>
+
+          <OfflineSyncBanner
+            isOnline={isOnline}
+            queuedCount={queuedCount}
+            lastSyncedAt={lastSyncedAt}
+            syncMessage={syncMessage}
+          />
+
+          <View style={styles.indexRow}>
+            <SummaryCard
+              label="This month"
+              value={formatInr(monthSpend)}
+              hint="Spend"
+              tone="primary"
+            />
+            <SummaryCard
+              label="Pending"
+              value={formatInr(pendingReimbursement)}
+              hint="Claims"
+              tone={pendingReimbursement > 0 ? 'warning' : 'success'}
+              onPress={() => navigation.navigate('MainTabs', {screen: 'History'})}
+            />
+            <SummaryCard
+              label="Attention"
+              value={String(needsInfo.length)}
+              hint={needsInfo.length ? 'Action needed' : 'All clear'}
+              tone={needsInfo.length > 0 ? 'danger' : 'success'}
+            />
+          </View>
+
+          <View style={styles.tabRow} accessibilityRole="tablist">
+            {TABS.map(item => {
+              const active = tab === item;
+              return (
+                <Pressable
+                  key={item}
+                  onPress={() => setTab(item)}
+                  accessibilityRole="tab"
+                  accessibilityState={{selected: active}}
+                  style={styles.tabItem}>
+                  <Text style={[styles.tabText, active ? styles.tabTextOn : null]}>{item}</Text>
+                  {active ? <View style={styles.tabUnderline} /> : <View style={styles.tabUnderlineGhost} />}
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {(tab === 'Overview' || tab === 'Pay') && (
+            <>
+              <SectionHeader title="Quick actions" />
+              <View style={styles.quickRow}>
+                <QuickAction
+                  mark="QR"
+                  label="Scan"
+                  hint="Pay"
+                  accent="blue"
+                  onPress={() => navigation.navigate('Scan')}
+                />
+                <QuickAction
+                  mark="≡"
+                  label="History"
+                  hint={`${transactions.length}`}
+                  accent="teal"
+                  onPress={() => navigation.navigate('MainTabs', {screen: 'History'})}
+                />
+                <QuickAction
+                  mark="₹"
+                  label="Pending"
+                  hint={formatInr(pendingReimbursement)}
+                  accent="amber"
+                  onPress={() => navigation.navigate('MainTabs', {screen: 'History'})}
+                />
+                <QuickAction
+                  mark="↻"
+                  label="Sync"
+                  hint={isOnline ? 'Online' : 'Off'}
+                  accent="green"
+                  onPress={() => retrySync()}
+                />
+              </View>
+
+              <SectionHeader
+                title="Scan & pay"
+                description="AllPay opens your installed UPI app — it does not settle the bank payment."
+              />
+              <View style={styles.grid}>
+                <ActionTile
+                  primary
+                  mark="QR"
+                  title="Scan & Pay"
+                  subtitle="Merchant QR → open UPI"
+                  onPress={() => navigation.navigate('Scan')}
+                />
+                <ActionTile
+                  mark="≡"
+                  title="Expense history"
+                  subtitle={`${transactions.length} records`}
+                  accent="blue"
+                  onPress={() => navigation.navigate('MainTabs', {screen: 'History'})}
+                />
+                <ActionTile
+                  mark="₹"
+                  title="Pending claims"
+                  subtitle={
+                    pendingReimbursement > 0
+                      ? `${formatInr(pendingReimbursement)} awaiting`
+                      : 'All clear'
+                  }
+                  accent="amber"
+                  onPress={() => navigation.navigate('MainTabs', {screen: 'History'})}
+                />
+                <ActionTile
+                  mark="···"
+                  title="Profile & policy"
+                  subtitle={`${policies.length} polic${policies.length === 1 ? 'y' : 'ies'}`}
+                  accent="purple"
+                  onPress={() => navigation.navigate('MainTabs', {screen: 'Settings'})}
+                />
+              </View>
+            </>
           )}
-        </Section>
+
+          {(tab === 'Overview' || tab === 'Activity') && (
+            <>
+              <SectionHeader
+                title="Recent expenses"
+                actionLabel="See all"
+                onAction={() => navigation.navigate('MainTabs', {screen: 'History'})}
+              />
+
+              <AppCard style={styles.listCard} padded>
+                {needsInfo.length > 0 ? (
+                  <View style={styles.needsBanner}>
+                    <Text style={styles.needsTitle}>{needsInfo.length} need attention</Text>
+                    <Text style={styles.needsSub}>Add receipts or missing details</Text>
+                  </View>
+                ) : null}
+
+                {latest.length === 0 ? (
+                  <EmptyState
+                    title="No expenses yet"
+                    description="Scan a merchant QR to record your first company payment. AllPay will open your UPI app to complete the bank transfer."
+                    action={
+                      <PrimaryButton
+                        label="Scan & Pay"
+                        onPress={() => navigation.navigate('Scan')}
+                      />
+                    }
+                  />
+                ) : (
+                  latest.map(item => (
+                    <TransactionRow
+                      key={item.id}
+                      merchant={item.merchant.name}
+                      amount={formatInr(item.amount)}
+                      date={new Date(item.timestamp).toLocaleDateString()}
+                      syncLabel={item.syncStatus === 'queued' ? 'Queued' : 'Synced'}
+                      hasReceipt={item.receipts.length > 0}
+                      hasLocation={!!item.location}
+                      reimbursementStatus={item.status}
+                      onPress={() =>
+                        navigation.navigate('TransactionDetail', {transactionId: item.id})
+                      }
+                    />
+                  ))
+                )}
+              </AppCard>
+            </>
+          )}
+
+          {(tab === 'Overview' || tab === 'Sync') && (
+            <AppCard elevated>
+              <Text style={styles.syncTitle}>Sync & privacy</Text>
+              <Text style={styles.syncLine}>
+                {isOnline ? 'Online' : 'Offline'} · {syncHint}
+                {queuedCount > 0 ? ` · ${queuedCount} queued` : ''}
+              </Text>
+              <Text style={styles.syncLine}>
+                Location: {locationEnabled ? 'One-time snapshot on' : 'Off'}
+              </Text>
+              {policies.length > 0 ? (
+                <Text style={styles.syncLine}>
+                  {policies.length} compan{policies.length === 1 ? 'y' : 'ies'} polic
+                  {policies.length === 1 ? 'y' : 'ies'} active
+                </Text>
+              ) : null}
+              {queuedCount > 0 ? (
+                <PrimaryButton label="Sync now" onPress={() => retrySync()} />
+              ) : null}
+            </AppCard>
+          )}
+        </FadeIn>
       </ScrollView>
     </Screen>
   );
@@ -87,81 +303,84 @@ export const HomeScreen = () => {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 18,
-    paddingBottom: 24,
+    paddingHorizontal: spacing.page,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xxxl,
     flexGrow: 1,
   },
-  metricsRow: {
+  topBar: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 14,
-  },
-  metricCard: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#dbe3ee',
-    paddingVertical: 13,
-    paddingHorizontal: 10,
-    minHeight: 82,
+    alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: spacing.lg,
+    gap: spacing.md,
   },
-  metricValue: {
-    color: '#0f172a',
-    fontSize: 19,
-    fontWeight: '800',
+  brandRow: {flexDirection: 'row', alignItems: 'center', gap: spacing.md, flex: 1, minWidth: 0},
+  brandText: {flex: 1, minWidth: 0},
+  brandTitle: {...typography.titleSm, color: colors.navy},
+  brandSub: {...typography.caption, color: colors.textSecondary, marginTop: 1},
+  topActions: {flexDirection: 'row', alignItems: 'center', gap: spacing.sm},
+  indexRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
-  metricLabel: {
-    color: '#64748b',
-    fontSize: 12,
-    marginTop: 2,
+  tabRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    marginBottom: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
-  syncBanner: {
-    backgroundColor: '#ecfdf5',
-    borderWidth: 1,
-    borderColor: '#bbf7d0',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
+  tabItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingTop: spacing.xs,
+    minHeight: 44,
   },
-  syncText: {
-    color: '#166534',
-    fontWeight: '700',
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textMuted,
+    paddingBottom: 10,
+    textAlign: 'center',
   },
-  empty: {
-    color: '#94a3b8',
+  tabTextOn: {color: colors.navy, fontWeight: '800'},
+  tabUnderline: {
+    alignSelf: 'stretch',
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: colors.primary,
+    marginBottom: -1,
   },
-  row: {
+  tabUnderlineGhost: {alignSelf: 'stretch', height: 3, marginBottom: -1},
+  quickRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-    paddingBottom: 10,
-    gap: 12,
+    marginBottom: spacing.xl,
+    gap: spacing.xs,
   },
-  flexOne: {
-    flex: 1,
-    minWidth: 0,
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
   },
-  merchant: {
-    fontWeight: '800',
-    color: '#0f172a',
+  listCard: {
+    backgroundColor: colors.muted,
+    marginBottom: spacing.md,
   },
-  meta: {
-    color: '#64748b',
-    fontSize: 13,
-    marginTop: 2,
+  needsBanner: {
+    backgroundColor: colors.warningSoft,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.warningBorder,
   },
-  rowRight: {
-    alignItems: 'flex-end',
-    gap: 6,
-    maxWidth: 150,
-  },
-  amount: {
-    color: '#0f172a',
-    fontSize: 13,
-    fontWeight: '800',
-  },
+  needsTitle: {...typography.caption, fontWeight: '800', color: colors.warningText},
+  needsSub: {...typography.caption, color: colors.warningText, marginTop: 2},
+  syncTitle: {...typography.section, color: colors.navy, marginBottom: spacing.sm},
+  syncLine: {...typography.caption, color: colors.textSecondary, lineHeight: 19, marginBottom: 2},
 });

@@ -8,6 +8,7 @@ import {
   requireRazorpaySecrets,
   type PaymentStatus,
 } from "./razorpayConfig";
+import { applyLocationToRecord } from "./paymentLocation";
 
 export type CreateOrderInput = {
   txId: string;
@@ -39,6 +40,7 @@ export type ConfirmPaymentInput = {
   razorpay_order_id: string;
   razorpay_payment_id: string;
   razorpay_signature: string;
+  location?: import("./paymentLocation").PaymentLocationSnapshot | null;
 };
 
 let razorpayClient: Razorpay | null = null;
@@ -233,8 +235,11 @@ export async function confirmRazorpayPayment(input: ConfirmPaymentInput): Promis
     tx.razorpayPaymentId = input.razorpay_payment_id;
     tx.upiRefId = input.razorpay_payment_id;
     appendTimeline(tx, "Payment confirmed via SDK (awaiting webhook)");
-    await tx.save();
   }
+  if (input.location && (tx.latitude == null || tx.longitude == null)) {
+    applyLocationToRecord(tx, input.location);
+  }
+  await tx.save();
 
   return tx;
 }

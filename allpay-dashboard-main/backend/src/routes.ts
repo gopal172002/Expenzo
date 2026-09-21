@@ -56,6 +56,11 @@ import {
   type MobileTransactionPayload
 } from "./services/mobileTransactionMapper";
 import {
+  applyLocationToRecord,
+  locationFieldsFromMobile,
+  parsePaymentLocation,
+} from "./services/paymentLocation";
+import {
   canSubmitReimbursement,
   mergeMobileSyncFields,
   reimbursementBlockedMessage
@@ -78,13 +83,16 @@ import {
   normalizeSerialEmployeeId,
 } from "./utils/employeeSerialId";
 import {
+  buildInviteCode,
   ensureEmployeeInviteCode,
   generateUniqueInviteCode,
+  normalizeInviteCode,
 } from "./utils/inviteCode";
 import {
   createCompanyRecord,
   ensureAdminCompany,
   ensureUniqueInvitePrefix,
+  getCompanyInvitePrefix,
   normalizeInvitePrefix,
 } from "./tenant";
 
@@ -856,6 +864,10 @@ router.post("/mobile/payments/confirm", mobileDeviceAuth, async (req: MobileRequ
       razorpay_order_id?: string;
       razorpay_payment_id?: string;
       razorpay_signature?: string;
+      latitude?: number | null;
+      longitude?: number | null;
+      locationCapturedAt?: string | null;
+      location?: unknown;
     };
     if (!body.txId || !body.razorpay_order_id || !body.razorpay_payment_id || !body.razorpay_signature) {
       return res.status(400).json({
@@ -864,11 +876,14 @@ router.post("/mobile/payments/confirm", mobileDeviceAuth, async (req: MobileRequ
       });
     }
 
+    const location = parsePaymentLocation(body);
+
     const tx = await confirmRazorpayPayment({
       txId: body.txId,
       razorpay_order_id: body.razorpay_order_id,
       razorpay_payment_id: body.razorpay_payment_id,
-      razorpay_signature: body.razorpay_signature
+      razorpay_signature: body.razorpay_signature,
+      location,
     });
 
     if (req.mobileEmployeeId && req.mobileEmployeeId !== tx.employeeId) {
@@ -878,7 +893,10 @@ router.post("/mobile/payments/confirm", mobileDeviceAuth, async (req: MobileRequ
     res.json({
       ok: true,
       paymentStatus: tx.paymentStatus,
-      razorpayPaymentId: tx.razorpayPaymentId
+      razorpayPaymentId: tx.razorpayPaymentId,
+      latitude: tx.latitude ?? null,
+      longitude: tx.longitude ?? null,
+      locationCapturedAt: tx.locationCapturedAt ?? null,
     });
   } catch (error) {
     const statusCode = (error as Error & { statusCode?: number }).statusCode ?? 500;
@@ -1045,6 +1063,15 @@ router.post("/mobile/transactions/sync", mobileDeviceAuth, async (req: MobileReq
       if (fields.mobileLocation !== undefined) {
         existing.mobileLocation = fields.mobileLocation;
       }
+      if (fields.latitude !== undefined) {
+        existing.latitude = fields.latitude as number | null;
+      }
+      if (fields.longitude !== undefined) {
+        existing.longitude = fields.longitude as number | null;
+      }
+      if (fields.locationCapturedAt !== undefined) {
+        existing.locationCapturedAt = fields.locationCapturedAt as string | null;
+      }
       if (Array.isArray(fields.mobileReceipts)) {
         existing.mobileReceipts = fields.mobileReceipts;
       }
@@ -1150,7 +1177,16 @@ router.patch("/mobile/transactions/:id", mobileDeviceAuth, async (req: MobileReq
       tx.mobileReceipts = body.receipts;
     }
     if (body.location !== undefined) {
-      tx.mobileLocation = body.location;
+      const locFields = locationFieldsFromMobile(body.location ?? null);
+      tx.mobileLocation = locFields.mobileLocation;
+      tx.latitude = locFields.latitude;
+      tx.longitude = locFields.longitude;
+      tx.locationCapturedAt = locFields.locationCapturedAt;
+    } else {
+      const fromBody = parsePaymentLocation(body);
+      if (fromBody) {
+        applyLocationToRecord(tx, fromBody);
+      }
     }
 
     tx.lastSyncedFromMobileAt = dayjs().toISOString();
@@ -1328,6 +1364,75 @@ router.get("/admin/transactions", async (req, res) => {
         { companyId }
       );
     res.json({ transactions, transactionPage, transactionPageSize, transactionTotal, hasMoreTransactions });
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+/**
+ * Admin: fetch a single payment/expense with GPS snapshot fields.
+ * `:id` may be a transaction id OR a UPI/Razorpay paymentId.
+ */
+router.get("/admin/payments/:id", async (req, res) => {
+  try {
+    const companyId = requireCompanyId(req, res);
+    if (!companyId) return;
+    const rawId = req.params["id"];
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
+    if (!id || typeof id !== "string") {
+      return res.status(400).json({ error: "Missing payment id" });
+    }
+
+    let tx = await Transaction.findOne({ id, companyId }).exec();
+    if (!tx) {
+      tx = await Transaction.findOne({ paymentId: id, companyId }).exec();
+    }
+    if (!tx) {
+      return res.status(404).json({ error: "Payment not found" });
+    }
+
+    const formatted = formatTransactionDoc(tx);
+    res.json({
+      ok: true,
+      payment: formatted,
+      transaction: formatted,
+      latitude: tx.latitude ?? null,
+      longitude: tx.longitude ?? null,
+      locationCapturedAt: tx.locationCapturedAt ?? null,
+      location_captured_at: tx.locationCapturedAt ?? null,
+      mobileLocation: tx.mobileLocation ?? null,
+    });
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+/** Admin: fetch a single transaction by expense id (includes location snapshot). */
+router.get("/admin/transactions/:id", async (req, res) => {
+  try {
+    const companyId = requireCompanyId(req, res);
+    if (!companyId) return;
+    const rawId = req.params["id"];
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
+    if (!id || typeof id !== "string") {
+      return res.status(400).json({ error: "Missing transaction id" });
+    }
+
+    const tx = await Transaction.findOne({ id, companyId }).exec();
+    if (!tx) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    const formatted = formatTransactionDoc(tx);
+    res.json({
+      ok: true,
+      transaction: formatted,
+      latitude: tx.latitude ?? null,
+      longitude: tx.longitude ?? null,
+      locationCapturedAt: tx.locationCapturedAt ?? null,
+      location_captured_at: tx.locationCapturedAt ?? null,
+      mobileLocation: tx.mobileLocation ?? null,
+    });
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
   }
@@ -1905,14 +2010,36 @@ router.get("/admin/employees", R_HR, async (req, res) => {
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b));
 
+    // Keep Mobile invite column in sync with PREFIX_EMPLOYEEID (heals legacy codes).
+    let invitePrefix = "";
+    try {
+      invitePrefix = await getCompanyInvitePrefix(companyId);
+    } catch {
+      invitePrefix = "";
+    }
+    const employees = [];
+    for (const emp of rows) {
+      const o = { ...(emp as Record<string, unknown>) };
+      delete o._id;
+      delete o.__v;
+      const empId = String(o.id || "");
+      if (invitePrefix && empId && !/^PEND-/i.test(empId)) {
+        try {
+          const desired = buildInviteCode(invitePrefix, empId);
+          if (normalizeInviteCode(String(o.inviteCode || "")) !== desired) {
+            await Employee.updateOne({ companyId, id: empId }, { $set: { inviteCode: desired } });
+            o.inviteCode = desired;
+          }
+        } catch {
+          // leave stored inviteCode as-is
+        }
+      }
+      employees.push(o);
+    }
+
     res.json({
       ok: true,
-      employees: rows.map((emp) => {
-        const o = { ...(emp as Record<string, unknown>) };
-        delete o._id;
-        delete o.__v;
-        return o;
-      }),
+      employees,
       page,
       pageSize: limit,
       total,

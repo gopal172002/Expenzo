@@ -14,87 +14,17 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useCallback, useMemo, useState, type ReactNode } from "react";
-import { PageHeader } from "../../components/layout/PageHeader";
+import { useCallback, useMemo, useState } from "react";
+import {
+  AdminCallout,
+  AdminCard,
+  AdminKpi,
+  AdminKpiRow,
+  AdminPage,
+  AdminTableShell,
+} from "../../components/admin/ui";
 import { useAdminData } from "../../context/AdminDataContext";
 import { AdminEmployeesOnboardingTable } from "./AdminEmployeesTable";
-
-function SectionPanel({
-  title,
-  description,
-  children,
-  action,
-}: {
-  title: string;
-  description?: ReactNode;
-  children: ReactNode;
-  action?: ReactNode;
-}) {
-  return (
-    <Box
-      sx={{
-        bgcolor: "#fff",
-        border: "1px solid",
-        borderColor: "divider",
-        px: 2,
-        py: 1.75,
-        height: "100%",
-      }}
-    >
-      <Stack
-        direction="row"
-        spacing={1}
-        alignItems="flex-start"
-        justifyContent="space-between"
-        sx={{ mb: description ? 1 : 1.25 }}
-      >
-        <Box sx={{ minWidth: 0 }}>
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{ fontWeight: 650, letterSpacing: "0.04em", textTransform: "uppercase" }}
-          >
-            {title}
-          </Typography>
-          {description ? (
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35 }}>
-              {description}
-            </Typography>
-          ) : null}
-        </Box>
-        {action}
-      </Stack>
-      {children}
-    </Box>
-  );
-}
-
-function KpiStat({ label, value, accent }: { label: string; value: string; accent: string }) {
-  return (
-    <Box
-      sx={{
-        flex: 1,
-        minWidth: 0,
-        bgcolor: "#fff",
-        borderLeft: "3px solid",
-        borderColor: accent,
-        px: 1.75,
-        py: 1.5,
-      }}
-    >
-      <Typography
-        variant="caption"
-        color="text.secondary"
-        sx={{ fontWeight: 650, letterSpacing: "0.04em", textTransform: "uppercase" }}
-      >
-        {label}
-      </Typography>
-      <Typography variant="h5" fontWeight={800} sx={{ mt: 0.5, letterSpacing: "-0.02em" }}>
-        {value}
-      </Typography>
-    </Box>
-  );
-}
 
 export const AdminEmployeesPage = () => {
   const {
@@ -173,80 +103,62 @@ export const AdminEmployeesPage = () => {
   const copyInviteCode = async (code: string) => copyText("Invite code", code);
 
   return (
-    <Stack spacing={2.5}>
-      <PageHeader
-        title="Employees"
-        description={`Invite or import people, assign IDs, and share mobile invite codes like ${prefixExample}_58847.`}
-        actions={
-          company?.name ? (
-            <Chip size="small" variant="outlined" label={company.name} sx={{ fontWeight: 650 }} />
-          ) : null
-        }
-      />
-
-      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
-        <KpiStat label="Total" value={String(kpiTotal)} accent="#2563EB" />
-        <KpiStat label="Active" value={String(kpiActive)} accent="#059669" />
-        <KpiStat label="Pending ID" value={String(kpiPending)} accent="#D97706" />
-        <KpiStat label="Onboarded" value={String(kpiOnboarded)} accent="#0F766E" />
-      </Stack>
-
-      {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
-      {info ? (
-        <Alert severity="info" onClose={() => setInfo("")}>
-          {info}
-        </Alert>
-      ) : null}
-      {assignedBanner ? (
-        <Alert
-          severity="success"
-          onClose={() => setAssignedBanner("")}
-          action={
-            <Button
-              color="inherit"
-              size="small"
-              onClick={() => {
-                const match = assignedBanner.match(/Assigned ([^\s]+)/);
-                if (match?.[1]) void copyId(match[1]);
-              }}
+    <AdminPage
+      title="Employees"
+      description={`Invite or import people, assign IDs, and share mobile invite codes like ${prefixExample}_58847.`}
+      actions={
+        company?.name ? (
+          <Chip size="small" variant="outlined" label={company.name} sx={{ fontWeight: 600 }} />
+        ) : null
+      }
+      alert={
+        <>
+          {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
+          {info ? (
+            <Alert severity="info" onClose={() => setInfo("")}>
+              {info}
+            </Alert>
+          ) : null}
+          {assignedBanner ? (
+            <Alert
+              severity="success"
+              onClose={() => setAssignedBanner("")}
+              action={
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={() => {
+                    const match = assignedBanner.match(/Assigned ([^\s]+)/);
+                    if (match?.[1]) void copyId(match[1]);
+                  }}
+                >
+                  Copy ID
+                </Button>
+              }
             >
-              Copy ID
-            </Button>
-          }
-        >
-          {assignedBanner}
-        </Alert>
-      ) : null}
+              {assignedBanner}
+            </Alert>
+          ) : null}
+        </>
+      }
+    >
+      <AdminKpiRow>
+        <AdminKpi label="Total" value={String(kpiTotal)} accent="primary" />
+        <AdminKpi label="Active" value={String(kpiActive)} accent="success" />
+        <AdminKpi label="Pending ID" value={String(kpiPending)} accent="warning" />
+        <AdminKpi label="Onboarded" value={String(kpiOnboarded)} accent="teal" />
+      </AdminKpiRow>
 
       {pendingEmployees.length > 0 ? (
-        <Box
-          sx={{
-            bgcolor: "#fff",
-            border: "1px solid",
-            borderColor: "#FDE68A",
-            borderLeft: "3px solid #D97706",
-            p: 2,
-          }}
+        <AdminCallout
+          tone="warning"
+          title={`Pending Employee ID · ${pendingEmployees.length}`}
         >
-          <Typography
-            variant="caption"
-            sx={{ fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "#B45309" }}
-          >
-            Pending Employee ID · {pendingEmployees.length}
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 1.5 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
             These people cannot use the mobile app until you assign an ID (creates their {prefixExample}_…
             invite code).
           </Typography>
-          <Box
-            sx={{
-              border: "1px solid",
-              borderColor: "divider",
-              borderRadius: 0,
-              overflow: "hidden",
-              bgcolor: "#fff",
-            }}
-          >
+          <AdminTableShell sx={{ borderRadius: 1 }}>
             <Table size="small">
               <TableHead>
                 <TableRow>
@@ -280,7 +192,6 @@ export const AdminEmployeesPage = () => {
                           setInfo("");
                           bumpDirectory();
                         }}
-                        sx={{ textTransform: "none" }}
                       >
                         Assign ID
                       </Button>
@@ -289,8 +200,8 @@ export const AdminEmployeesPage = () => {
                 ))}
               </TableBody>
             </Table>
-          </Box>
-        </Box>
+          </AdminTableShell>
+        </AdminCallout>
       ) : null}
 
       <Box
@@ -300,10 +211,7 @@ export const AdminEmployeesPage = () => {
           gap: 1.25,
         }}
       >
-        <SectionPanel
-          title="Invite employee"
-          description="Send a single invite with optional employee ID."
-        >
+        <AdminCard title="Invite employee" description="Send a single invite with optional employee ID." sx={{ height: "100%" }}>
           <Stack spacing={1.25}>
             <TextField
               size="small"
@@ -354,9 +262,9 @@ export const AdminEmployeesPage = () => {
               Invite employee
             </Button>
           </Stack>
-        </SectionPanel>
+        </AdminCard>
 
-        <SectionPanel
+        <AdminCard
           title="Company invite prefix"
           description={
             <>
@@ -369,6 +277,7 @@ export const AdminEmployeesPage = () => {
               letters — never reuse an existing prefix.
             </>
           }
+          sx={{ height: "100%" }}
         >
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "flex-start" }}>
             <TextField
@@ -398,11 +307,12 @@ export const AdminEmployeesPage = () => {
               Save prefix
             </Button>
           </Stack>
-        </SectionPanel>
+        </AdminCard>
 
-        <SectionPanel
+        <AdminCard
           title="Bulk import via CSV"
           description="Paste rows with employee ID, name, email, department, role."
+          sx={{ height: "100%" }}
         >
           <TextField
             multiline
@@ -432,9 +342,9 @@ export const AdminEmployeesPage = () => {
           >
             Import CSV
           </Button>
-        </SectionPanel>
+        </AdminCard>
 
-        <SectionPanel title="Department controls" description="Create, rename, or remove departments.">
+        <AdminCard title="Department controls" description="Create, rename, or remove departments." sx={{ height: "100%" }}>
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1} flexWrap="wrap" useFlexGap>
             <TextField
               size="small"
@@ -487,7 +397,7 @@ export const AdminEmployeesPage = () => {
               ))}
             </Stack>
           ) : null}
-        </SectionPanel>
+        </AdminCard>
       </Box>
 
       <AdminEmployeesOnboardingTable
@@ -519,6 +429,6 @@ export const AdminEmployeesPage = () => {
           if (result.ok) bumpDirectory();
         }}
       />
-    </Stack>
+    </AdminPage>
   );
 };

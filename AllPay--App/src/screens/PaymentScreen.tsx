@@ -1,17 +1,21 @@
 import {RouteProp, useNavigation, useRoute} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import React, {useState} from 'react';
-import {Alert, Platform, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {Alert, Platform, ScrollView, StyleSheet, Text} from 'react-native';
 import {COMPANY_AMOUNT_LIMIT} from '../constants/mockData';
 import {
-  FormInput,
+  AppTextInput,
+  DetailRow,
+  InfoBanner,
   PrimaryButton,
   Screen,
   ScreenHeader,
+  SecondaryButton,
   Section,
 } from '../components/UI';
 import {useAppData} from '../context/AppContext';
 import {RootStackParamList} from '../navigation';
+import {colors, spacing} from '../theme/tokens';
 import {getPolicyWarningFromPolicies} from '../utils/policies';
 import {toast} from '../utils/toast';
 import {trackUpiEvent} from '../upi/analytics';
@@ -30,15 +34,6 @@ import {
 
 type Route = RouteProp<RootStackParamList, 'Payment'>;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
-
-const DetailRow = ({label, value}: {label: string; value: string}) => (
-  <View style={styles.detailRow}>
-    <Text style={styles.detailLabel}>{label}</Text>
-    <Text style={styles.detailValue} numberOfLines={2}>
-      {value}
-    </Text>
-  </View>
-);
 
 function pickUpiApp(
   apps: Array<{id: string; name: string}>,
@@ -81,6 +76,8 @@ export const PaymentScreen = () => {
     policies,
     transactions,
     defaultUpiAppId,
+    locationEnabled,
+    installedUpiApps,
     createUpiPayment,
     markUpiAppOpened,
     applyUpiPaymentStatus,
@@ -98,6 +95,9 @@ export const PaymentScreen = () => {
     merchantCategoryCode: merchant.merchantCategoryCode,
     baseSanitizedUri: merchant.sanitizedUri,
   });
+
+  const defaultAppName =
+    installedUpiApps.find(a => a.id === defaultUpiAppId)?.name ?? 'your UPI app';
 
   const continuePayment = async (parsedPaise: number) => {
     if (paying || !profile) {
@@ -299,37 +299,44 @@ export const PaymentScreen = () => {
     qrLockedPaise !== undefined ? qrLockedPaise : parseRupeeInputToPaise(amountText);
   const payLabel =
     displayPaise && isSaneAmountPaise(displayPaise)
-      ? personalP2p
-        ? `Pay ₹${paiseToRupeeLabel(displayPaise)}`
-        : `Pay ₹${paiseToRupeeLabel(displayPaise)}`
+      ? `Pay ₹${paiseToRupeeLabel(displayPaise)} with UPI`
       : 'Continue to UPI';
 
   return (
     <Screen safeTop={false}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <ScreenHeader
-          title="Confirm Payment"
-          subtitle={
-            personalP2p
-              ? 'Personal UPI — tries auto-pay first; if bank blocks it, scan the payment QR in Paytm.'
-              : 'Opens your UPI app with payee filled. PIN is entered only in that app.'
-          }
+          eyebrow={profile?.companyName}
+          title="Confirm payment"
+          subtitle="Review details, then AllPay opens your UPI app. Your PIN is entered only in that app."
         />
 
+        <InfoBanner tone="info" title="External UPI payment">
+          AllPay will open {defaultAppName} (or let you choose). Opening the app is not the same as
+          a successful bank payment — the result is recorded when the UPI app reports it.
+        </InfoBanner>
+
         {statusMessage ? (
-          <View style={styles.statusBanner}>
-            <Text style={styles.statusMessage}>{statusMessage}</Text>
-          </View>
+          <InfoBanner tone="warning" title="Working…">
+            {statusMessage}
+          </InfoBanner>
         ) : null}
 
-        <Section title="Payee">
+        <Section title="Merchant">
           <DetailRow label="Name" value={merchant.name} />
-          <DetailRow label="UPI ID" value={merchant.vpa} />
-          {merchant.note ? <DetailRow label="Note" value={merchant.note} /> : null}
+          <DetailRow label="UPI ID (VPA)" value={merchant.vpa} />
+          <DetailRow label="Category" value={merchant.category || '—'} />
+          <DetailRow
+            label="MCC"
+            value={merchant.mcc || merchant.merchantCategoryCode || '—'}
+            last={!merchant.note}
+          />
+          {merchant.note ? <DetailRow label="Note" value={merchant.note} last /> : null}
         </Section>
 
         <Section title="Amount">
-          <FormInput
+          <AppTextInput
+            label="Amount (INR)"
             value={amountText}
             onChangeText={text => {
               if (qrLockedPaise !== undefined) {
@@ -342,27 +349,48 @@ export const PaymentScreen = () => {
             editable={qrLockedPaise === undefined}
             keyboardType="decimal-pad"
             placeholder="Enter amount in INR"
+            helper={
+              qrLockedPaise !== undefined
+                ? 'Amount is fixed by the merchant QR.'
+                : `Company threshold warning at ₹${COMPANY_AMOUNT_LIMIT.toLocaleString('en-IN')}`
+            }
+            style={styles.amountInput}
           />
-          {qrLockedPaise !== undefined ? (
-            <Text style={styles.helpText}>Amount is fixed by the merchant QR.</Text>
-          ) : (
-            <Text style={styles.helpText}>
-              Company threshold warning: INR {COMPANY_AMOUNT_LIMIT}
-            </Text>
-          )}
         </Section>
 
-        <Text style={styles.disclaimer}>
-          {personalP2p
-            ? 'Personal UPI: auto-pay may fail on SBI after PIN. If that happens, scan the payment QR inside Paytm.'
-            : 'Shop / merchant QRs open your UPI app directly with payee and amount filled.'}
-        </Text>
+        <Section title="Before you pay">
+          <DetailRow
+            label="Selected UPI app"
+            value={defaultUpiAppId ? defaultAppName : 'Choose when paying'}
+          />
+          <DetailRow
+            label="Location snapshot"
+            value={
+              locationEnabled
+                ? 'Enabled — one-time capture after confirmation'
+                : 'Off — enable in Settings if finance requires it'
+            }
+          />
+          <DetailRow
+            label="Payment type"
+            value={personalP2p ? 'Personal UPI ID' : 'Merchant / shop QR'}
+            last
+          />
+          {personalP2p ? (
+            <Text style={styles.helpText}>
+              Personal UPI: auto-pay may fail on some banks after PIN. If that happens, use Scan to
+              pay inside your UPI app.
+            </Text>
+          ) : null}
+        </Section>
 
         <PrimaryButton
           label={paying ? 'Opening UPI…' : payLabel}
           onPress={onConfirm}
           disabled={paying}
+          loading={paying}
         />
+        <SecondaryButton label="Cancel" onPress={() => navigation.goBack()} disabled={paying} />
       </ScrollView>
     </Screen>
   );
@@ -370,50 +398,20 @@ export const PaymentScreen = () => {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 18,
+    padding: spacing.page,
     paddingBottom: 24,
     flexGrow: 1,
   },
-  statusBanner: {
-    backgroundColor: '#eff6ff',
-    borderColor: '#bfdbfe',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 12,
-  },
-  statusMessage: {
-    color: '#1557d5',
-    fontWeight: '800',
-  },
-  detailRow: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#eef2f7',
-    paddingBottom: 10,
-    marginBottom: 10,
-  },
-  detailLabel: {
-    color: '#64748b',
-    fontSize: 12,
-    fontWeight: '800',
-    marginBottom: 3,
-    textTransform: 'uppercase',
-  },
-  detailValue: {
-    color: '#0f172a',
-    fontSize: 15,
-    fontWeight: '700',
-    lineHeight: 21,
-  },
   helpText: {
-    color: '#64748b',
+    color: colors.textSecondary,
     fontSize: 12,
+    lineHeight: 18,
+    marginTop: spacing.sm,
   },
-  disclaimer: {
-    color: '#64748b',
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 4,
+  amountInput: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.navy,
+    letterSpacing: -0.4,
   },
 });

@@ -13,7 +13,9 @@ import {
 } from 'react-native';
 import {Camera, CameraType} from 'react-native-camera-kit';
 import {
-  FormInput,
+  AppTextInput,
+  IconButton,
+  InfoBanner,
   PrimaryButton,
   Screen,
   ScreenHeader,
@@ -25,6 +27,7 @@ import {merchantFromUpiQr} from '../utils/upi';
 import {toast} from '../utils/toast';
 import {trackUpiEvent} from '../upi/analytics';
 import {parseUpiQr as parseValidatedUpiQr} from '../upi/scanner/UpiQrParser';
+import {colors, radius, shadow, spacing, typography} from '../theme/tokens';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type R = RouteProp<RootStackParamList, 'Scan'>;
@@ -38,6 +41,7 @@ export const ScannerScreen = () => {
   const [cameraAuth, setCameraAuth] = useState(Platform.OS !== 'android');
   const [rawManual, setRawManual] = useState('');
   const [showManual, setShowManual] = useState(false);
+  const [scanFlash, setScanFlash] = useState(false);
   const lastScanAt = useRef(0);
   const handledValue = useRef<string | null>(null);
 
@@ -59,7 +63,7 @@ export const ScannerScreen = () => {
         PermissionsAndroid.PERMISSIONS.CAMERA,
         {
           title: 'Camera permission',
-          message: 'Allpay needs the camera to scan UPI merchant QR codes.',
+          message: 'AllPay needs the camera to scan UPI merchant QR codes.',
           buttonPositive: 'Allow',
         },
       );
@@ -70,7 +74,7 @@ export const ScannerScreen = () => {
       if (status === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
         Alert.alert(
           'Camera blocked',
-          'Open system settings to enable the camera for Allpay.',
+          'Open system settings to enable the camera for AllPay.',
           [
             {text: 'Cancel', style: 'cancel'},
             {text: 'Open settings', onPress: () => Linking.openSettings()},
@@ -108,6 +112,8 @@ export const ScannerScreen = () => {
       }
       trackUpiEvent('upi_qr_scanned');
       handledValue.current = trimmed;
+      setScanFlash(true);
+      setTimeout(() => setScanFlash(false), 400);
       navigation.navigate('Payment', {merchant: merchantFromUpiQr(validated)});
     },
     [navigation],
@@ -121,42 +127,55 @@ export const ScannerScreen = () => {
     <Screen safeTop={false}>
       <ScrollView
         contentContainerStyle={styles.container}
-        keyboardShouldPersistTaps="handled">
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}>
         <ScreenHeader
-          title="Scan & Pay"
-          subtitle="Point the camera at a UPI QR. Payment opens only after you confirm."
+          title="Scan merchant QR"
+          subtitle="Point the camera at a UPI QR. AllPay opens your UPI app only after you confirm the payment."
         />
 
-        <View style={styles.cameraWrap}>
-          {cameraAuth ? (
-            <Camera
-              style={styles.camera}
-              cameraType={CameraType.Back}
-              scanBarcode
-              showFrame
-              laserColor="#3b82f6"
-              frameColor="#60a5fa"
-              torchMode={torchOn ? 'on' : 'off'}
-              onReadCode={e => onQrValue(e.nativeEvent.codeStringValue)}
-              onError={e =>
-                toast.error('Camera error', e.nativeEvent.errorMessage)
-              }
-              allowedBarcodeTypes={['qr']}
-            />
-          ) : (
-            <View style={styles.cameraPlaceholder}>
-              <Text style={styles.placeholderText}>
-              {Platform.OS === 'android'
-                  ? 'Waiting for camera permission...'
-                  : 'Preparing camera...'}
-              </Text>
+        <InfoBanner tone="info" title="External UPI">
+          Scanning does not pay the merchant. After you confirm, AllPay launches PhonePe, Google Pay,
+          Paytm, or BHIM to complete the bank payment.
+        </InfoBanner>
+
+        <View style={styles.cameraCard}>
+          <View style={[styles.cameraWrap, scanFlash ? styles.cameraFlash : null]}>
+            {cameraAuth ? (
+              <Camera
+                style={styles.camera}
+                cameraType={CameraType.Back}
+                scanBarcode
+                showFrame
+                laserColor={colors.scannerLaser}
+                frameColor={colors.scannerFrame}
+                torchMode={torchOn ? 'on' : 'off'}
+                onReadCode={e => onQrValue(e.nativeEvent.codeStringValue)}
+                onError={e => toast.error('Camera error', e.nativeEvent.errorMessage)}
+                allowedBarcodeTypes={['qr']}
+              />
+            ) : (
+              <View style={styles.cameraPlaceholder}>
+                <Text style={styles.placeholderText}>
+                  {Platform.OS === 'android'
+                    ? 'Waiting for camera permission...'
+                    : 'Preparing camera...'}
+                </Text>
+              </View>
+            )}
+            <View style={styles.scanHintOverlay} pointerEvents="none">
+              <Text style={styles.scanHintText}>Align QR inside the frame</Text>
             </View>
-          )}
-          <SecondaryButton
-            label={torchOn ? 'Turn torch off' : 'Turn torch on'}
-            onPress={() => setTorchOn(v => !v)}
-            disabled={!cameraAuth}
-          />
+          </View>
+          <View style={styles.cameraControls}>
+            <IconButton
+              label={torchOn ? 'Torch on' : 'Torch'}
+              active={torchOn}
+              onPress={() => setTorchOn(v => !v)}
+              disabled={!cameraAuth}
+            />
+            <Text style={styles.controlHint}>Hold steady for a clear scan</Text>
+          </View>
         </View>
 
         <Section title="Trouble scanning?">
@@ -166,7 +185,8 @@ export const ScannerScreen = () => {
           </Text>
           {showManual ? (
             <>
-              <FormInput
+              <AppTextInput
+                label="UPI link"
                 value={rawManual}
                 onChangeText={setRawManual}
                 placeholder="Paste full UPI link (upi://pay?...)"
@@ -190,39 +210,78 @@ export const ScannerScreen = () => {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 18,
+    padding: spacing.page,
     paddingBottom: 24,
     flexGrow: 1,
   },
+  cameraCard: {
+    backgroundColor: colors.paper,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    ...shadow.card,
+  },
   cameraWrap: {
-    marginBottom: 12,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    marginBottom: spacing.md,
+  },
+  cameraFlash: {
+    borderWidth: 3,
+    borderColor: colors.success,
   },
   camera: {
     width: '100%',
-    height: 320,
-    borderRadius: 8,
-    overflow: 'hidden',
+    height: 340,
   },
   cameraPlaceholder: {
     width: '100%',
-    height: 320,
-    borderRadius: 8,
-    backgroundColor: '#111827',
+    height: 340,
+    backgroundColor: colors.navy,
     alignItems: 'center',
     justifyContent: 'center',
   },
   placeholderText: {
-    color: '#94a3b8',
+    color: colors.textMuted,
     fontSize: 14,
   },
+  scanHintOverlay: {
+    position: 'absolute',
+    bottom: 16,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  scanHintText: {
+    backgroundColor: colors.scannerOverlay,
+    color: colors.textInverse,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    fontSize: 12,
+    fontWeight: '600',
+    overflow: 'hidden',
+  },
+  cameraControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  controlHint: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    flex: 1,
+  },
   hintText: {
-    color: '#64748b',
+    color: colors.textSecondary,
     fontSize: 13,
     lineHeight: 20,
-    marginBottom: 2,
+    marginBottom: spacing.sm,
   },
   mono: {
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    color: '#334155',
+    color: colors.navySoft,
   },
 });

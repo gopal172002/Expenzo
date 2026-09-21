@@ -8,6 +8,8 @@ const KEYS = {
   upiPayments: 'allpay.upiPayments',
   defaultUpiAppId: 'allpay.defaultUpiAppId',
   locationEnabled: 'allpay.locationEnabled',
+  /** First-run product carousel. Not cleared on logout so returning users skip it. */
+  introSeen: 'allpay.introSeen',
 };
 
 export const storage = {
@@ -53,6 +55,20 @@ export const storage = {
   async getLocationEnabled(): Promise<boolean> {
     const raw = await AsyncStorage.getItem(KEYS.locationEnabled);
     return raw ? Boolean(JSON.parse(raw)) : false;
+  },
+
+  async getIntroSeen(): Promise<boolean> {
+    const raw = await AsyncStorage.getItem(KEYS.introSeen);
+    return raw === '1';
+  },
+
+  async setIntroSeen(): Promise<void> {
+    await AsyncStorage.setItem(KEYS.introSeen, '1');
+  },
+
+  /** Explicit replay of the product carousel (not called on normal logout). */
+  async resetIntroSeen(): Promise<void> {
+    await AsyncStorage.removeItem(KEYS.introSeen);
   },
 
   async clearSession(): Promise<void> {

@@ -1,3 +1,5 @@
+import { locationFieldsFromMobile } from "./paymentLocation";
+
 /** Payload shape from AllpayEmployeeApp (React Native) */
 export type MobileMerchant = {
   vpa: string;
@@ -91,6 +93,7 @@ export function mobileTxToDashboardFields(
     "General";
 
   const upiRef = (tx.upiRefId && String(tx.upiRefId).trim()) || "PENDING";
+  const locationFields = locationFieldsFromMobile(tx.location ?? null);
 
   return {
     id: tx.id,
@@ -115,7 +118,10 @@ export function mobileTxToDashboardFields(
     reimbursementNote: tx.reimbursementNote,
     policyWarning: tx.policyWarning,
     warningAcknowledged: tx.warningAcknowledged ?? false,
-    mobileLocation: tx.location ?? null,
+    mobileLocation: locationFields.mobileLocation,
+    latitude: locationFields.latitude,
+    longitude: locationFields.longitude,
+    locationCapturedAt: locationFields.locationCapturedAt,
     mobileReceipts: Array.isArray(tx.receipts) ? tx.receipts : [],
     lastSyncedFromMobileAt: new Date().toISOString(),
     ...(typeof tx.amountPaise === "number" ? { amountPaise: tx.amountPaise } : {}),

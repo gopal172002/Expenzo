@@ -45,22 +45,15 @@ export const KNOWN_UPI_APPS: UpiApp[] = [
   },
 ];
 
+/** Offline fixtures only — live onboarding uses Admin → Employees invite codes (PREFIX_EMPLOYEEID). */
 const INVITES: Record<string, OnboardingProfile> = {
-  ALLPAY123: {
+  DEM_EMP1000: {
     companyId: 'cmp_001',
-    companyName: 'Allpay Logistics Pvt Ltd',
-    employeeId: 'EMP-4452',
-    employeeName: 'Ravi Kumar',
-    department: 'Field Sales',
+    companyName: 'AllPay Demo',
+    employeeId: 'EMP-1000',
+    employeeName: 'Employee 1',
+    department: 'Engineering',
     mobile: '+91 90000 11223',
-  },
-  OPS8899: {
-    companyId: 'cmp_001',
-    companyName: 'Allpay Logistics Pvt Ltd',
-    employeeId: 'EMP-9981',
-    employeeName: 'Asha Singh',
-    department: 'Operations',
-    mobile: '+91 95555 22110',
   },
 };
 

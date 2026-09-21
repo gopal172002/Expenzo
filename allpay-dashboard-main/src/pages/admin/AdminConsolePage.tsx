@@ -3,7 +3,6 @@ import DeleteOutline from "@mui/icons-material/DeleteOutline";
 import EditOutlined from "@mui/icons-material/EditOutlined";
 import HubOutlined from "@mui/icons-material/HubOutlined";
 import ScheduleOutlined from "@mui/icons-material/ScheduleOutlined";
-import SettingsOutlined from "@mui/icons-material/SettingsOutlined";
 import PeopleAltOutlined from "@mui/icons-material/PeopleAltOutlined";
 import PlayArrowOutlined from "@mui/icons-material/PlayArrowOutlined";
 import LockOutlined from "@mui/icons-material/LockOutlined";
@@ -11,10 +10,7 @@ import {
   Alert,
   Box,
   Button,
-  Card,
-  CardContent,
   Chip,
-  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -50,6 +46,8 @@ import {
   type ScheduledJob,
   type ScheduledJobType,
 } from "../../api/adminConsoleApi";
+import { AdminCard, AdminPage, AdminPageLoader } from "../../components/admin/ui";
+import { AdminStatusChip } from "../../components/admin/AdminStatusChip";
 import { useAuth } from "../../context/AuthContext";
 import type { AdminRole, AdminUser } from "../../types";
 
@@ -137,9 +135,9 @@ const emptyUser = (): Partial<AdminUser> => ({
 });
 
 function statusChip(status: PlatformConnection["status"]) {
-  if (status === "connected") return <Chip size="small" color="success" label="Connected" />;
-  if (status === "error") return <Chip size="small" color="error" label="Needs attention" />;
-  return <Chip size="small" variant="outlined" label="Not tested" />;
+  if (status === "connected") return <AdminStatusChip status="connected" />;
+  if (status === "error") return <AdminStatusChip status="needs_attention" />;
+  return <AdminStatusChip status="not_tested" />;
 }
 
 export function AdminConsolePage() {
@@ -194,35 +192,32 @@ export function AdminConsolePage() {
 
   if (loading) {
     return (
-      <Stack alignItems="center" sx={{ py: 8 }}>
-        <CircularProgress />
-        <Typography color="text.secondary" sx={{ mt: 2 }}>
-          Loading Admin Console…
-        </Typography>
-      </Stack>
+      <AdminPage title="Admin console" description="Workspace users, receipt storage, export destinations, and jobs that actually run on a cron.">
+        <AdminPageLoader label="Loading Admin Console…" />
+      </AdminPage>
     );
   }
 
   return (
-    <Stack spacing={2.5}>
-      <Card sx={{ borderRadius: 3 }}>
-        <CardContent>
-          <Stack direction="row" spacing={1.5} alignItems="center">
-            <SettingsOutlined color="primary" />
-            <Box>
-              <Typography variant="h5">Admin console</Typography>
-              <Typography color="text.secondary">
-                Workspace users, receipt storage, export destinations, and jobs that actually run on a cron.
-              </Typography>
-            </Box>
-          </Stack>
-        </CardContent>
-      </Card>
-
-      {error ? <Alert severity="error" onClose={() => setError("")}>{error}</Alert> : null}
-      {notice ? <Alert severity="success" onClose={() => setNotice("")}>{notice}</Alert> : null}
-
-      <Card sx={{ borderRadius: 3 }}>
+    <AdminPage
+      title="Admin console"
+      description="Workspace users, receipt storage, export destinations, and jobs that actually run on a cron."
+      alert={
+        <>
+          {error ? (
+            <Alert severity="error" onClose={() => setError("")}>
+              {error}
+            </Alert>
+          ) : null}
+          {notice ? (
+            <Alert severity="success" onClose={() => setNotice("")}>
+              {notice}
+            </Alert>
+          ) : null}
+        </>
+      }
+    >
+      <AdminCard variant="flush">
         <Tabs
           value={tab}
           onChange={(_, next) => setTab(next)}
@@ -236,7 +231,7 @@ export function AdminConsolePage() {
           <Tab icon={<ScheduleOutlined />} iconPosition="start" label="Scheduler" />
         </Tabs>
 
-        <CardContent>
+        <Box sx={{ p: 2 }}>
           {tab === 0 ? (
             <UserManagementTab
               users={users}
@@ -329,8 +324,8 @@ export function AdminConsolePage() {
               }
             />
           ) : null}
-        </CardContent>
-      </Card>
+        </Box>
+      </AdminCard>
 
       {userDialog ? (
         <UserDialog
@@ -376,7 +371,7 @@ export function AdminConsolePage() {
           }
         />
       ) : null}
-    </Stack>
+    </AdminPage>
   );
 }
 
@@ -403,7 +398,7 @@ function UserManagementTab({
     <Stack spacing={2}>
       <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={1.5}>
         <Box>
-          <Typography fontWeight={650}>Workspace users</Typography>
+          <Typography fontWeight={600}>Workspace users</Typography>
           <Typography variant="body2" color="text.secondary">
             Super Admin keeps read and write permanently enabled. At least one active Super Admin must remain.
             Sessions expire after 30 minutes of inactivity. 2FA is recorded per user; TOTP enrolment is enforced
@@ -424,7 +419,7 @@ function UserManagementTab({
       >
         {(Object.keys(ROLE_SUMMARY) as AdminRole[]).map((role) => (
           <Box key={role} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1.5, p: 1.25 }}>
-            <Typography variant="body2" fontWeight={650}>
+            <Typography variant="body2" fontWeight={600}>
               {ROLE_LABELS[role]}
             </Typography>
             <Typography variant="caption" color="text.secondary">
@@ -468,7 +463,7 @@ function UserManagementTab({
                 return (
                   <TableRow key={admin.id} hover>
                     <TableCell>
-                      <Typography fontWeight={650}>{admin.name}</Typography>
+                      <Typography fontWeight={600}>{admin.name}</Typography>
                       <Typography variant="caption" color="text.secondary">
                         {admin.id}
                         {isSelf ? " · you" : ""}
@@ -683,10 +678,10 @@ function PlatformConfigurationTab({
       </Stack>
 
       <Stack direction="row" spacing={1} alignItems="center">
-        <Button variant="contained" disabled={!dirty} onClick={() => onSave(draft)} sx={{ textTransform: "none" }}>
+        <Button variant="contained" disabled={!dirty} onClick={() => onSave(draft)}>
           Save configuration
         </Button>
-        <Button disabled={!dirty} onClick={() => setDraft(config)} sx={{ textTransform: "none" }}>
+        <Button disabled={!dirty} onClick={() => setDraft(config)}>
           Discard changes
         </Button>
         {config.updatedAt ? (
@@ -731,7 +726,7 @@ function ConnectionManagerTab({
     <Stack spacing={2}>
       <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={1.5}>
         <Box>
-          <Typography fontWeight={650}>Destinations</Typography>
+          <Typography fontWeight={600}>Destinations</Typography>
           <Typography variant="body2" color="text.secondary">
             Cloud storage and warehouse extracts this workspace writes to. Keep warehouse connectors here — they
             do not belong on the main claims sidebar. Test writes a probe file or validates required fields.
@@ -780,7 +775,7 @@ function ConnectionManagerTab({
                   </Box>
                   <Box sx={{ minWidth: 0, flex: 1 }}>
                     <Stack direction="row" spacing={1} alignItems="center">
-                      <Typography fontWeight={650} noWrap>
+                      <Typography fontWeight={600} noWrap>
                         {connection.name}
                       </Typography>
                       {statusChip(connection.status)}
@@ -842,7 +837,7 @@ function SchedulerTab({
     <Stack spacing={2}>
       <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={1.5}>
         <Box>
-          <Typography fontWeight={650}>Scheduled jobs</Typography>
+          <Typography fontWeight={600}>Scheduled jobs</Typography>
           <Typography variant="body2" color="text.secondary">
             The API process runs these on cron. Use Run now to execute immediately and write warehouse extracts
             to the server data folder.
@@ -1031,10 +1026,10 @@ function UserDialog({
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} sx={{ textTransform: "none" }}>
+        <Button onClick={onClose}>
           Cancel
         </Button>
-        <Button variant="contained" disabled={!valid} onClick={() => onSave(draft)} sx={{ textTransform: "none" }}>
+        <Button variant="contained" disabled={!valid} onClick={() => onSave(draft)}>
           Save user
         </Button>
       </DialogActions>
@@ -1140,10 +1135,10 @@ function ConnectionDialog({
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} sx={{ textTransform: "none" }}>
+        <Button onClick={onClose}>
           Cancel
         </Button>
-        <Button variant="contained" disabled={!valid} onClick={() => onSave(draft)} sx={{ textTransform: "none" }}>
+        <Button variant="contained" disabled={!valid} onClick={() => onSave(draft)}>
           Save connection
         </Button>
       </DialogActions>
@@ -1210,10 +1205,10 @@ function JobDialog({
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} sx={{ textTransform: "none" }}>
+        <Button onClick={onClose}>
           Cancel
         </Button>
-        <Button variant="contained" disabled={!valid} onClick={() => onSave(draft)} sx={{ textTransform: "none" }}>
+        <Button variant="contained" disabled={!valid} onClick={() => onSave(draft)}>
           Save job
         </Button>
       </DialogActions>

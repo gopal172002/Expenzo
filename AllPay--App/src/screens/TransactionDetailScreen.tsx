@@ -1,23 +1,21 @@
 import {RouteProp, useRoute} from '@react-navigation/native';
 import React, {useMemo, useState} from 'react';
-import {
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import {Image, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {launchCamera, launchImageLibrary} from 'react-native-image-picker';
 import {EXPENSE_PURPOSES} from '../constants/mockData';
 import {
-  FormInput,
+  AppTextInput,
+  DetailRow,
+  ErrorState,
+  InfoBanner,
   PrimaryButton,
   Screen,
   ScreenHeader,
   Section,
   SecondaryButton,
-  StatusPill,
+  SelectInput,
+  StatusBadge,
+  Timeline,
 } from '../components/UI';
 import {useAppData} from '../context/AppContext';
 import {RootStackParamList} from '../navigation';
@@ -26,6 +24,7 @@ import {isPaymentCaptured} from '../services/payments';
 import {toast} from '../utils/toast';
 import {maskRef, maskVpa} from '../upi/mask';
 import {paiseToRupeeLabel} from '../upi/money';
+import {colors, radius, spacing} from '../theme/tokens';
 
 type Route = RouteProp<RootStackParamList, 'TransactionDetail'>;
 
@@ -42,15 +41,6 @@ const normalizeReceipts = (assets: any[]): Receipt[] =>
     fileSize: asset.fileSize ?? 0,
     type: asset.type ?? 'image/jpeg',
   }));
-
-const DetailRow = ({label, value}: {label: string; value: string}) => (
-  <View style={styles.detailRow}>
-    <Text style={styles.detailLabel}>{label}</Text>
-    <Text style={styles.detailValue} numberOfLines={2}>
-      {value}
-    </Text>
-  </View>
-);
 
 export const TransactionDetailScreen = () => {
   const route = useRoute<Route>();
@@ -72,7 +62,7 @@ export const TransactionDetailScreen = () => {
     return (
       <Screen safeTop={false}>
         <View style={styles.centered}>
-          <Text style={styles.notFound}>Transaction not found.</Text>
+          <ErrorState title="Transaction not found" />
         </View>
       </Screen>
     );
@@ -126,14 +116,57 @@ export const TransactionDetailScreen = () => {
     toast.success('Submitted', 'This expense is now pending approval.');
   };
 
+  const timelineItems = [
+    {
+      title: 'Expense recorded',
+      meta: new Date(tx.timestamp).toLocaleString(),
+      tone: 'success' as const,
+    },
+    tx.paymentStatus
+      ? {
+          title: `Payment: ${tx.paymentStatus.replace(/_/g, ' ')}`,
+          meta: tx.upiRefId ? `Ref ${maskRef(tx.upiRefId)}` : undefined,
+          tone:
+            tx.paymentStatus === 'SUCCESS_REPORTED' || tx.paymentStatus === 'USER_CONFIRMED'
+              ? ('success' as const)
+              : tx.paymentStatus === 'FAILED' || tx.paymentStatus === 'CANCELLED'
+                ? ('danger' as const)
+                : ('warning' as const),
+        }
+      : null,
+    {
+      title: `Reimbursement: ${tx.status}`,
+      meta: tx.adminNote || tx.rejectionReason,
+      tone:
+        tx.status === 'Approved'
+          ? ('success' as const)
+          : tx.status === 'Rejected'
+            ? ('danger' as const)
+            : ('default' as const),
+    },
+    {
+      title: `Sync: ${tx.syncStatus}`,
+      tone: tx.syncStatus === 'synced' ? ('success' as const) : ('warning' as const),
+    },
+  ].filter(Boolean) as Array<{title: string; meta?: string; tone?: 'default' | 'success' | 'warning' | 'danger'}>;
+
   return (
     <Screen safeTop={false}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <ScreenHeader
-          title={`Transaction ${tx.id}`}
-          subtitle={new Date(tx.timestamp).toLocaleString()}
+          title={tx.merchant.name}
+          subtitle={`${new Date(tx.timestamp).toLocaleString()} · ${tx.id}`}
         />
-        <StatusPill status={tx.status} />
+        <View style={styles.statusRow}>
+          <StatusBadge status={tx.status} />
+          {tx.paymentStatus ? <StatusBadge status={tx.paymentStatus} /> : null}
+          <StatusBadge status={tx.syncStatus} />
+        </View>
+
+        <InfoBanner tone="info" title="Payment vs reimbursement">
+          Payment status is what your UPI app reported. Reimbursement status is decided by finance.
+          A successful payment record is not an approved claim.
+        </InfoBanner>
 
         <Section title="Payment details">
           <DetailRow label="Merchant" value={tx.merchant.name} />
@@ -151,15 +184,9 @@ export const TransactionDetailScreen = () => {
             }
           />
           <DetailRow label="Method" value={tx.paymentMethod === 'UPI_INTENT' ? 'UPI' : tx.upiApp} />
-          <DetailRow label="Status" value={tx.paymentStatus ?? 'Not started'} />
+          <DetailRow label="Payment status" value={tx.paymentStatus ?? 'Not started'} />
           <DetailRow label="Reference" value={maskRef(tx.upiRefId ?? tx.upiTxnRef)} />
           <DetailRow label="Sync" value={tx.syncStatus} />
-          {tx.paymentMethod === 'UPI_INTENT' ? (
-            <Text style={styles.helpText}>
-              SUCCESS_REPORTED means the UPI app returned success. Expenzo did not
-              independently verify settlement with the bank.
-            </Text>
-          ) : null}
           <DetailRow
             label="Location"
             value={
@@ -167,14 +194,26 @@ export const TransactionDetailScreen = () => {
                 ? `${tx.location.latitude.toFixed(4)}, ${tx.location.longitude.toFixed(4)}`
                 : 'Not captured'
             }
+            last
           />
+          {tx.paymentMethod === 'UPI_INTENT' ? (
+            <Text style={styles.helpText}>
+              SUCCESS_REPORTED means the UPI app returned success. AllPay did not independently
+              verify settlement with the bank.
+            </Text>
+          ) : null}
+          {tx.policyWarning ? (
+            <InfoBanner tone="warning" title="Policy warning">
+              {tx.policyWarning}
+            </InfoBanner>
+          ) : null}
         </Section>
 
         {unresolvedUpi && tx.paymentId ? (
           <Section title="Couldn't determine payment status">
             <Text style={styles.helpText}>
-              We couldn't determine the result of this UPI payment. Recording
-              manually is not the same as a successful UPI callback.
+              We couldn't determine the result of this UPI payment. Recording manually is not the
+              same as a successful UPI callback.
             </Text>
             <SecondaryButton
               label="Record expense"
@@ -183,9 +222,11 @@ export const TransactionDetailScreen = () => {
           </Section>
         ) : null}
 
-        <Section title="Receipts (max 3, within 48h)">
+        <Section title="Receipts" description="Max 3 images, within 48 hours of payment.">
           <View style={styles.thumbWrap}>
-            {tx.receipts.length === 0 ? <Text style={styles.empty}>No receipts uploaded yet.</Text> : null}
+            {tx.receipts.length === 0 ? (
+              <Text style={styles.empty}>No receipts uploaded yet.</Text>
+            ) : null}
             {tx.receipts.map(receipt => (
               <Image key={receipt.id} source={{uri: receipt.uri}} style={styles.thumb} />
             ))}
@@ -193,11 +234,11 @@ export const TransactionDetailScreen = () => {
           {canAttach ? (
             <>
               <SecondaryButton
-                label="Attach from camera"
+                label="Take receipt photo"
                 onPress={() => attachFromSource('camera')}
               />
               <SecondaryButton
-                label="Attach from gallery"
+                label="Choose from gallery"
                 onPress={() => attachFromSource('gallery')}
               />
             </>
@@ -209,57 +250,63 @@ export const TransactionDetailScreen = () => {
         </Section>
 
         <Section title="Submit for reimbursement">
-          <Text style={styles.helpText}>Selected purpose: {purpose}</Text>
-          <View style={styles.purposeWrap}>
-            {EXPENSE_PURPOSES.map(item => (
-              <Pressable
-                accessibilityRole="button"
-                key={item}
-                onPress={() => setPurpose(item)}
-                style={[
-                  styles.purposeChip,
-                  purpose === item ? styles.purposeChipActive : null,
-                ]}>
-                <Text
-                  style={[
-                    styles.purposeText,
-                    purpose === item ? styles.purposeTextActive : null,
-                  ]}
-                  numberOfLines={1}>
-                  {item}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          <FormInput
+          {!canSubmit ? (
+            <InfoBanner tone="warning" title="Submission blocked">
+              {!paymentReady
+                ? 'Confirm the payment result before submitting a claim.'
+                : 'This expense is already submitted or cannot be claimed in its current state.'}
+            </InfoBanner>
+          ) : null}
+          <SelectInput
+            label="Business purpose"
+            options={EXPENSE_PURPOSES}
+            value={purpose}
+            onChange={setPurpose}
+          />
+          <AppTextInput
+            label="Note"
             value={note}
             onChangeText={setNote}
             multiline
             maxLength={500}
             placeholder="Add note (max 500 chars)"
             editable={canSubmit}
+            helper={`${note.length}/500`}
           />
-          <PrimaryButton
-            label={submitLabel}
-            onPress={submit}
-            disabled={!canSubmit}
-          />
+          <PrimaryButton label={submitLabel} onPress={submit} disabled={!canSubmit} />
+        </Section>
+
+        <Section title="Activity">
+          <Timeline items={timelineItems} />
         </Section>
 
         {tx.status === 'Approved' ? (
           <Section title="Approval info">
-            <Text style={styles.row}>
-              Reimbursed: INR {tx.reimbursementAmount?.toFixed(2) ?? '--'}
-            </Text>
-            <Text style={styles.row}>
-              Date: {tx.reimbursementDate ? new Date(tx.reimbursementDate).toLocaleDateString() : '--'}
-            </Text>
+            <DetailRow
+              label="Reimbursed"
+              value={`INR ${tx.reimbursementAmount?.toFixed(2) ?? '--'}`}
+            />
+            <DetailRow
+              label="Date"
+              value={
+                tx.reimbursementDate
+                  ? new Date(tx.reimbursementDate).toLocaleDateString()
+                  : '--'
+              }
+              last
+            />
           </Section>
         ) : null}
 
         {tx.status === 'Rejected' ? (
           <Section title="Rejected reason">
             <Text style={styles.row}>{tx.rejectionReason ?? tx.adminNote ?? 'Not provided'}</Text>
+          </Section>
+        ) : null}
+
+        {tx.adminNote && tx.status === 'Flagged' ? (
+          <Section title="Admin comment">
+            <Text style={styles.row}>{tx.adminNote}</Text>
           </Section>
         ) : null}
       </ScrollView>
@@ -269,7 +316,7 @@ export const TransactionDetailScreen = () => {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 18,
+    padding: spacing.page,
     paddingBottom: 24,
     flexGrow: 1,
   },
@@ -277,82 +324,42 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    padding: spacing.page,
   },
-  notFound: {
-    color: '#334155',
-    fontWeight: '600',
+  statusRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
   },
   row: {
-    color: '#1e293b',
+    color: colors.navy,
     marginBottom: 6,
-  },
-  detailRow: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#eef2f7',
-    paddingBottom: 10,
-    marginBottom: 10,
-  },
-  detailLabel: {
-    color: '#64748b',
-    fontSize: 12,
-    fontWeight: '800',
-    marginBottom: 3,
-    textTransform: 'uppercase',
-  },
-  detailValue: {
-    color: '#0f172a',
-    fontSize: 15,
-    fontWeight: '700',
-    lineHeight: 21,
+    lineHeight: 20,
   },
   thumbWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+    marginBottom: spacing.sm,
   },
   thumb: {
     width: 96,
     height: 96,
-    borderRadius: 8,
-    backgroundColor: '#cbd5e1',
+    borderRadius: radius.md,
+    backgroundColor: colors.border,
     borderWidth: 1,
-    borderColor: '#dbe3ee',
+    borderColor: colors.border,
   },
   empty: {
-    color: '#94a3b8',
+    color: colors.textMuted,
     width: '100%',
+    marginBottom: spacing.sm,
   },
   helpText: {
-    color: '#64748b',
+    color: colors.textSecondary,
     marginBottom: 8,
     lineHeight: 20,
-  },
-  purposeWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 8,
-  },
-  purposeChip: {
-    borderWidth: 1,
-    borderColor: '#c7d2e1',
-    borderRadius: 8,
-    paddingHorizontal: 11,
-    paddingVertical: 8,
-    backgroundColor: '#ffffff',
-    maxWidth: '100%',
-  },
-  purposeChipActive: {
-    backgroundColor: '#eff6ff',
-    borderColor: '#1557d5',
-  },
-  purposeText: {
-    color: '#475569',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  purposeTextActive: {
-    color: '#1557d5',
-    fontWeight: '800',
+    fontSize: 13,
   },
 });

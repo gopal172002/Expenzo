@@ -12,8 +12,7 @@ describe('UpiPaymentLauncher iOS', () => {
   const originalOS = Platform.OS;
 
   beforeEach(() => {
-    // @ts-expect-error test override
-    Platform.OS = 'ios';
+    Object.defineProperty(Platform, 'OS', {configurable: true, get: () => 'ios'});
     jest.spyOn(Linking, 'canOpenURL').mockImplementation(async (url: string) => {
       return (
         url.startsWith('paytmmp://upi/pay') ||
@@ -28,8 +27,7 @@ describe('UpiPaymentLauncher iOS', () => {
   });
 
   afterEach(() => {
-    // @ts-expect-error restore
-    Platform.OS = originalOS;
+    Object.defineProperty(Platform, 'OS', {configurable: true, get: () => originalOS});
     jest.restoreAllMocks();
   });
 

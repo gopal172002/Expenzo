@@ -1,4 +1,4 @@
-import type {Transaction} from '../../types';
+import type {LocationPoint, Transaction} from '../../types';
 import {paiseToRupeeLabel} from '../money';
 import type {UpiIntentPayment} from '../model/types';
 
@@ -10,6 +10,7 @@ export function expenseFromPayment(
   payment: UpiIntentPayment,
   employeeId: string,
   expenseId?: string,
+  location: LocationPoint = null,
 ): Transaction {
   const amountLabel = paiseToRupeeLabel(payment.amountPaise);
   return {
@@ -32,7 +33,7 @@ export function expenseFromPayment(
     status: 'Recorded',
     syncStatus: 'queued',
     receipts: [],
-    location: null,
+    location,
     paymentStatus: payment.status,
     paymentMethod: 'UPI_INTENT',
     paymentId: payment.id,

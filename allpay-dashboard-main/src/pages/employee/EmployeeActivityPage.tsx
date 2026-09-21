@@ -1,7 +1,5 @@
 import WarningAmber from "@mui/icons-material/WarningAmber";
 import {
-  Card,
-  CardContent,
   Chip,
   Stack,
   Table,
@@ -14,9 +12,16 @@ import {
 import dayjs from "dayjs";
 import { useMemo } from "react";
 import { Link as RouterLink } from "react-router-dom";
+import {
+  AdminCard,
+  AdminEmptyState,
+  AdminPage,
+  AdminTableShell,
+} from "../../components/admin/ui";
 import { useEmployeeData } from "../../context/EmployeeDataContext";
+import { ADMIN } from "../../theme";
 
-const fmt = (n: number) => `Rs.${n.toLocaleString("en-IN")}`;
+const fmt = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 
 export function EmployeeActivityPage() {
   const { transactions } = useEmployeeData();
@@ -36,34 +41,29 @@ export function EmployeeActivityPage() {
   }, [transactions]);
 
   return (
-    <Stack spacing={2.5}>
-      <Card sx={{ borderRadius: 3 }}>
-        <CardContent>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-            <WarningAmber color="warning" />
-            <Typography variant="h5" fontWeight={800}>
-              My flagged activity
-            </Typography>
-          </Stack>
-          <Typography color="text.secondary">
-            Mirrors the idea behind admin <strong>Fraud &amp; Audit</strong>: automated rule hits on your lines only.
-            Admins still investigate org-wide from their dashboard.
-          </Typography>
-        </CardContent>
-      </Card>
-
-      <Card sx={{ borderRadius: 3 }}>
-        <CardContent sx={{ p: 0, "&:last-child": { pb: 0 } }}>
-          <Table>
+    <AdminPage
+      title="Activity & flags"
+      description="Automated rule hits on your expenses. Finance investigates org-wide from Claim review. A flag is not a final rejection."
+    >
+      <AdminCard title="Flagged expenses" variant="flush">
+        <AdminTableShell
+          isEmpty={flagged.length === 0}
+          empty={
+            <AdminEmptyState
+              title="No flagged activity"
+              description="When a policy or verification rule hits one of your expenses, it appears here with a plain-language reason."
+              icon={<WarningAmber color="warning" />}
+            />
+          }
+        >
+          <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell sx={{ fontWeight: 700, color: "text.secondary" }}>When</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: "text.secondary" }}>Merchant</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: "text.secondary" }}>Amount</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: "text.secondary" }}>Rules</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: "text.secondary" }} align="right">
-                  Open
-                </TableCell>
+                <TableCell>When</TableCell>
+                <TableCell>Merchant</TableCell>
+                <TableCell>Amount</TableCell>
+                <TableCell>Rules</TableCell>
+                <TableCell align="right">Open</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -79,20 +79,12 @@ export function EmployeeActivityPage() {
                           key={flag.id}
                           label={flag.reason}
                           size="small"
-                          sx={{
-                            bgcolor: "#f97316",
-                            color: "#fff",
-                            fontWeight: 600,
-                            "& .MuiChip-label": { px: 1 },
-                          }}
+                          color="warning"
+                          sx={{ fontWeight: 600, borderRadius: `${ADMIN.radius.sm}px` }}
                         />
                       ))}
                       {tx.flags.length === 0 ? (
-                        <Chip
-                          label="flagged"
-                          size="small"
-                          sx={{ bgcolor: "#f97316", color: "#fff", fontWeight: 600 }}
-                        />
+                        <Chip label="Flagged" size="small" color="warning" />
                       ) : null}
                     </Stack>
                   </TableCell>
@@ -102,21 +94,20 @@ export function EmployeeActivityPage() {
                       to={`/employee/transaction/${tx.id}`}
                       sx={{
                         color: "primary.main",
-                        fontWeight: 800,
+                        fontWeight: 700,
                         fontSize: 13,
-                        letterSpacing: 0.5,
                         textDecoration: "none",
                       }}
                     >
-                      DETAIL
+                      View
                     </Typography>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
-    </Stack>
+        </AdminTableShell>
+      </AdminCard>
+    </AdminPage>
   );
 }

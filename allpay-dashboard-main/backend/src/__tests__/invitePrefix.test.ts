@@ -1,4 +1,9 @@
-import { buildInviteCode, normalizeInviteCode } from "../utils/inviteCode";
+import {
+  buildInviteCode,
+  normalizeEmployeeIdForInvite,
+  normalizeInviteCode,
+  parsePrefixInviteCode,
+} from "../utils/inviteCode";
 import {
   deriveInvitePrefix,
   invitePrefixCandidates,
@@ -34,7 +39,17 @@ describe("company invite prefix + employee invite code", () => {
   it("builds invite code as PREFIX_EMPLOYEEID (suffix = company employee id)", () => {
     expect(buildInviteCode("MCR", "58847")).toBe("MCR_58847");
     expect(buildInviteCode("dem", "emp1")).toBe("DEM_EMP1");
+    expect(buildInviteCode("DEM", "EMP-1000")).toBe("DEM_EMP1000");
     expect(normalizeInviteCode("mcr_58847")).toBe("MCR_58847");
+  });
+
+  it("parses PREFIX_EMPLOYEEID invite codes", () => {
+    expect(parsePrefixInviteCode("dem_emp-1000")).toEqual({
+      prefix: "DEM",
+      employeeIdKey: "EMP1000",
+    });
+    expect(normalizeEmployeeIdForInvite("EMP-1000")).toBe("EMP1000");
+    expect(parsePrefixInviteCode("ALLPAY123")).toBeNull();
   });
 
   it("rejects invite code build without prefix or employee id", () => {

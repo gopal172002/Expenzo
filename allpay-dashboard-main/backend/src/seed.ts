@@ -343,6 +343,9 @@ export async function seedDatabase() {
     if (inviteMigration.updated) {
       console.log(`Invite codes migrated: ${inviteMigration.updated} updated, ${inviteMigration.skipped} skipped`);
     }
+    if (inviteMigration.errors.length) {
+      console.warn("Invite code migration errors:", inviteMigration.errors.join("; "));
+    }
     if (receipts) console.log(`Demo receipts attached: ${receipts}`);
     if (verificationDemo.payments || verificationDemo.attendance) {
       console.log(

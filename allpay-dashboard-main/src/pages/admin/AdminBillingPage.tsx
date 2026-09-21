@@ -1,10 +1,7 @@
 import Download from "@mui/icons-material/Download";
-import ReceiptLong from "@mui/icons-material/ReceiptLong";
 import {
   Alert,
   Button,
-  Card,
-  CardContent,
   Chip,
   Stack,
   Table,
@@ -15,6 +12,7 @@ import {
   Typography,
 } from "@mui/material";
 import dayjs from "dayjs";
+import { AdminCard, AdminPage, AdminTableShell } from "../../components/admin/ui";
 import { useAdminData } from "../../context/AdminDataContext";
 
 const plans = [
@@ -28,43 +26,41 @@ export const AdminBillingPage = () => {
   const overage = billing.headcount > billing.licenses;
 
   return (
-    <Stack spacing={2.5}>
-      <Card sx={{ borderRadius: 3 }}>
-        <CardContent>
-          <Typography variant="h5">
-            Billing
-          </Typography>
-          <Typography color="text.secondary">
-            Manage current plan, renewal, invoices, and headcount versus license utilization.
-          </Typography>
-          <Stack direction="row" spacing={1.1} mt={1.2}>
-            <Chip label={`Current plan: ${billing.plan}`} color="primary" />
-            <Chip label={`Cycle: ${billing.billingCycle}`} />
-            <Chip label={`Next renewal: ${billing.nextRenewal}`} color="success" />
-          </Stack>
-          {overage && <Alert severity="warning" sx={{ mt: 1.2 }}>Headcount exceeded license count. Auto-upgrade recommended.</Alert>}
-        </CardContent>
-      </Card>
+    <AdminPage
+      title="Billing"
+      description="Manage current plan, renewal, invoices, and headcount versus license utilization."
+      actions={
+        <>
+          <Chip size="small" label={`Current plan: ${billing.plan}`} color="primary" />
+          <Chip size="small" variant="outlined" label={`Cycle: ${billing.billingCycle}`} />
+          <Chip size="small" color="success" variant="outlined" label={`Next renewal: ${billing.nextRenewal}`} />
+        </>
+      }
+      alert={
+        overage ? (
+          <Alert severity="warning">Headcount exceeded license count. Auto-upgrade recommended.</Alert>
+        ) : undefined
+      }
+    >
+      <AdminCard title="Upgrade plan (prorated)" description="Switch plans any time. Charges are prorated for the current cycle.">
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1} flexWrap="wrap" useFlexGap>
+          <Button variant="outlined" onClick={() => updateBillingPlan("Basic")}>
+            Basic
+          </Button>
+          <Button variant="contained" onClick={() => updateBillingPlan("Pro")}>
+            Pro
+          </Button>
+          <Button variant="outlined" onClick={() => updateBillingPlan("Enterprise")}>
+            Enterprise
+          </Button>
+        </Stack>
+        <Typography variant="body2" color="text.secondary" mt={1.5}>
+          Licenses used: {billing.headcount} / {billing.licenses}
+        </Typography>
+      </AdminCard>
 
-      <Card sx={{ borderRadius: 3 }}>
-        <CardContent>
-          <Typography variant="h6" fontWeight={700}>
-            Upgrade plan (prorated)
-          </Typography>
-          <Stack direction="row" spacing={1} mt={1}>
-            <Button variant="outlined" onClick={() => updateBillingPlan("Basic")}>Basic</Button>
-            <Button variant="contained" onClick={() => updateBillingPlan("Pro")}>Pro</Button>
-            <Button variant="outlined" onClick={() => updateBillingPlan("Enterprise")}>Enterprise</Button>
-          </Stack>
-          <Typography variant="body2" mt={1}>
-            Licenses used: {billing.headcount} / {billing.licenses}
-          </Typography>
-        </CardContent>
-      </Card>
-
-      <Card sx={{ borderRadius: 3 }}>
-        <CardContent>
-          <Typography variant="h6" fontWeight={700}>Plan comparison</Typography>
+      <AdminCard title="Plan comparison" variant="flush">
+        <AdminTableShell sx={{ border: "none", borderRadius: 0 }}>
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -76,35 +72,32 @@ export const AdminBillingPage = () => {
             </TableHead>
             <TableBody>
               {plans.map((plan) => (
-                <TableRow key={plan.name}>
-                  <TableCell>{plan.name}</TableCell>
-                  <TableCell>{plan.cards}</TableCell>
+                <TableRow key={plan.name} hover selected={plan.name === billing.plan}>
+                  <TableCell>
+                    <Typography variant="body2" fontWeight={plan.name === billing.plan ? 700 : 500}>
+                      {plan.name}
+                      {plan.name === billing.plan ? " · Current" : ""}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>{plan.cards === 9999 ? "Unlimited" : plan.cards}</TableCell>
                   <TableCell>{plan.approvals}</TableCell>
                   <TableCell>{plan.analytics}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+        </AdminTableShell>
+      </AdminCard>
 
-      <Card sx={{ borderRadius: 3 }}>
-        <CardContent>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <ReceiptLong />
-            <Typography variant="h6" fontWeight={700}>
-              Billing history
-            </Typography>
-          </Stack>
-          <Stack direction="row" spacing={1} mt={1}>
-            {[0, 1, 2, 3].map((idx) => (
-              <Button key={idx} startIcon={<Download />} variant="text">
-                Invoice {dayjs().subtract(idx, "month").format("MMM YYYY")} (PDF)
-              </Button>
-            ))}
-          </Stack>
-        </CardContent>
-      </Card>
-    </Stack>
+      <AdminCard title="Billing history" description="Download prior invoices as PDF.">
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          {[0, 1, 2, 3].map((idx) => (
+            <Button key={idx} startIcon={<Download />} variant="outlined" size="small">
+              Invoice {dayjs().subtract(idx, "month").format("MMM YYYY")}
+            </Button>
+          ))}
+        </Stack>
+      </AdminCard>
+    </AdminPage>
   );
 };

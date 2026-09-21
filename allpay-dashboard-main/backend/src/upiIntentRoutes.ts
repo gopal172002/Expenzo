@@ -1,6 +1,7 @@
 import type { Router } from "express";
 import { mobileDeviceAuth, type MobileRequest } from "./middleware/mobileDeviceAuth";
 import { applyUpiIntentResult, createUpiIntentPayment } from "./services/upiIntentService";
+import { parsePaymentLocation } from "./services/paymentLocation";
 import { UpiIntentPayment } from "./models";
 
 export function registerUpiIntentRoutes(router: Router): void {
@@ -18,6 +19,10 @@ export function registerUpiIntentRoutes(router: Router): void {
         paymentMethod?: string;
         launchTxnRef?: string;
         employeeId?: string;
+        latitude?: number | null;
+        longitude?: number | null;
+        locationCapturedAt?: string | null;
+        location?: unknown;
       };
 
       const employeeId = req.mobileEmployeeId || body.employeeId?.trim();
@@ -37,6 +42,8 @@ export function registerUpiIntentRoutes(router: Router): void {
         });
       }
 
+      const location = parsePaymentLocation(body);
+
       const payment = await createUpiIntentPayment({
         paymentId: body.paymentId,
         employeeId,
@@ -49,12 +56,16 @@ export function registerUpiIntentRoutes(router: Router): void {
         category: body.category,
         mcc: body.mcc,
         launchTxnRef: body.launchTxnRef,
+        location,
       });
 
       res.json({
         ok: true,
         paymentId: payment.id,
         status: payment.status,
+        latitude: payment.latitude ?? null,
+        longitude: payment.longitude ?? null,
+        locationCapturedAt: payment.locationCapturedAt ?? null,
       });
     } catch (error) {
       const statusCode = (error as Error & { statusCode?: number }).statusCode ?? 500;
@@ -76,10 +87,16 @@ export function registerUpiIntentRoutes(router: Router): void {
         approvalRefNo?: string;
         responseCode?: string;
         employeeId?: string;
+        latitude?: number | null;
+        longitude?: number | null;
+        locationCapturedAt?: string | null;
+        location?: unknown;
       };
       if (!body.status) {
         return res.status(400).json({ ok: false, message: "status is required" });
       }
+
+      const location = parsePaymentLocation(body);
 
       const result = await applyUpiIntentResult({
         paymentId,
@@ -89,6 +106,7 @@ export function registerUpiIntentRoutes(router: Router): void {
         upiTxnRef: body.upiTxnRef,
         approvalRefNo: body.approvalRefNo,
         responseCode: body.responseCode,
+        location,
       });
 
       res.json({
@@ -97,6 +115,9 @@ export function registerUpiIntentRoutes(router: Router): void {
         status: result.payment.status,
         expenseId: result.expenseId ?? null,
         idempotent: result.idempotent,
+        latitude: result.payment.latitude ?? null,
+        longitude: result.payment.longitude ?? null,
+        locationCapturedAt: result.payment.locationCapturedAt ?? null,
       });
     } catch (error) {
       const statusCode = (error as Error & { statusCode?: number }).statusCode ?? 500;
@@ -129,6 +150,9 @@ export function registerUpiIntentRoutes(router: Router): void {
         expenseId: payment.expenseId ?? null,
         upiTxnId: payment.upiTxnId ?? null,
         upiTxnRef: payment.upiTxnRef ?? null,
+        latitude: payment.latitude ?? null,
+        longitude: payment.longitude ?? null,
+        locationCapturedAt: payment.locationCapturedAt ?? null,
       });
     } catch (error) {
       res.status(500).json({ ok: false, message: (error as Error).message });

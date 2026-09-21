@@ -8,7 +8,6 @@ import {
   Card,
   CardActionArea,
   CardContent,
-  Chip,
   Link,
   Stack,
   Table,
@@ -23,6 +22,7 @@ import { useCallback, useMemo } from "react";
 import { Link as RouterLink, useLocation, useSearchParams } from "react-router-dom";
 import type { Transaction } from "../../types";
 import { inr, statusLabel } from "../../utils/labels";
+import { AdminStatusChip } from "../admin/AdminStatusChip";
 import { ReceiptImage } from "./ReceiptImage";
 
 type Path = {
@@ -88,14 +88,14 @@ function FolderCard({
               <FolderOutlined fontSize="small" />
             </Box>
             <Box sx={{ minWidth: 0, flex: 1 }}>
-              <Typography fontWeight={650} noWrap>
+              <Typography fontWeight={600} noWrap>
                 {title}
               </Typography>
               <Typography variant="caption" color="text.secondary" noWrap>
                 {subtitle}
               </Typography>
               <Stack direction="row" spacing={1} sx={{ mt: 1 }} alignItems="center">
-                <Typography variant="body2" fontWeight={650}>
+                <Typography variant="body2" fontWeight={600}>
                   {inr(amount)}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
@@ -237,7 +237,7 @@ export function ReceiptExplorer({
               {crumb.label}
             </Link>
           ) : (
-            <Typography key={crumb.label} variant="body2" fontWeight={650}>
+            <Typography key={crumb.label} variant="body2" fontWeight={600}>
               {crumb.label}
             </Typography>
           )
@@ -347,7 +347,7 @@ export function ReceiptExplorer({
                     )}
                   </TableCell>
                   <TableCell>
-                    <Typography variant="body2" fontWeight={650}>
+                    <Typography variant="body2" fontWeight={600}>
                       {tx.merchantName}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
@@ -360,19 +360,7 @@ export function ReceiptExplorer({
                   <TableCell align="right">{inr(tx.amount)}</TableCell>
                   <TableCell>{dayjs(tx.dateTime).format("DD MMM YYYY, HH:mm")}</TableCell>
                   <TableCell>
-                    <Chip
-                      size="small"
-                      color={
-                        tx.status === "approved"
-                          ? "success"
-                          : tx.status === "rejected"
-                            ? "error"
-                            : tx.status === "flagged"
-                              ? "warning"
-                              : "default"
-                      }
-                      label={statusLabel(tx.status)}
-                    />
+                    <AdminStatusChip status={tx.status} label={statusLabel(tx.status)} />
                   </TableCell>
                   <TableCell align="right">
                     <Button

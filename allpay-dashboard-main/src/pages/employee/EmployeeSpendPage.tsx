@@ -1,11 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useReducer, useState } from "react";
 import {
   Alert,
-  Box,
-  Card,
-  CardContent,
   CircularProgress,
-  Divider,
   FormControl,
   MenuItem,
   Select,
@@ -13,6 +9,12 @@ import {
   Typography,
 } from "@mui/material";
 import { employeeApi, type EmployeeSpendResponse } from "../../api/employeeApi";
+import {
+  AdminCard,
+  AdminKpi,
+  AdminKpiRow,
+  AdminPage,
+} from "../../components/admin/ui";
 import { useEmployeeData } from "../../context/EmployeeDataContext";
 import { computeEmployeeSpendFromTransactions } from "../../utils/employeeSpend";
 
@@ -20,7 +22,7 @@ const EmployeeSpendBarChart = lazy(() =>
   import("../../components/charts/EmployeeSpendBarChart").then((m) => ({ default: m.EmployeeSpendBarChart }))
 );
 
-const fmt = (n: number) => `Rs.${n.toLocaleString("en-IN")}`;
+const fmt = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 const CHART_CATEGORIES = ["Fuel", "Office Supplies", "Travel", "Lodging", "Bars/Alcohol", "Meals"];
 
 type SpendLoadState = {
@@ -103,73 +105,38 @@ export function EmployeeSpendPage() {
   const showLoader = (loadState.loading || isBootstrapping) && !loadState.data;
 
   return (
-    <Card
-      sx={{
-        borderRadius: 3,
-        border: "1px solid #e8edf2",
-        boxShadow: "0 1px 2px rgba(15,23,42,0.04)",
-      }}
+    <AdminPage
+      title="My spend"
+      description="Category and range totals for your expenses only. Approved amounts are reimbursement decisions — not UPI settlement."
+      actions={
+        <FormControl size="small" sx={{ minWidth: 148 }}>
+          <Select value={range} onChange={(e) => setRange(Number(e.target.value))}>
+            <MenuItem value={7}>Last 7 days</MenuItem>
+            <MenuItem value={30}>Last 30 days</MenuItem>
+            <MenuItem value={90}>Last 90 days</MenuItem>
+          </Select>
+        </FormControl>
+      }
     >
-      <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={2}>
-          <Box>
-            <Typography variant="h5" sx={{ fontWeight: 800, color: "#0f172a", mb: 0.75 }}>
-              My spend
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Same metrics style as admin Analytics, scoped to your transactions only.
-            </Typography>
-          </Box>
-          <FormControl size="small" sx={{ minWidth: 148, flexShrink: 0 }}>
-            <Select
-              value={range}
-              onChange={(e) => setRange(Number(e.target.value))}
-              sx={{
-                borderRadius: 2,
-                bgcolor: "#fff",
-                fontSize: 14,
-                "& .MuiOutlinedInput-notchedOutline": { borderColor: "#d1d9e0" },
-              }}
-            >
-              <MenuItem value={7}>Last 7 days</MenuItem>
-              <MenuItem value={30}>Last 30 days</MenuItem>
-              <MenuItem value={90}>Last 90 days</MenuItem>
-            </Select>
-          </FormControl>
-        </Stack>
+      {loadState.error ? <Alert severity="error">{loadState.error}</Alert> : null}
 
-        {loadState.error ? (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {loadState.error}
-          </Alert>
-        ) : null}
-
+      <AdminCard title="Summary">
         {loadState.data && !showLoader ? (
-          <Stack direction="row" spacing={3} flexWrap="wrap" sx={{ mt: 2.5, mb: 2.5 }}>
-            <Typography variant="body2" sx={{ color: "#0f172a" }}>
-              <Box component="span" sx={{ fontWeight: 700 }}>
-                Approved
-              </Box>{" "}
-              in range: {fmt(loadState.data.approvedInRange)}
-            </Typography>
-            <Typography variant="body2" sx={{ color: "#0f172a" }}>
-              <Box component="span" sx={{ fontWeight: 700 }}>
-                Pending
-              </Box>{" "}
-              in range: {fmt(loadState.data.pendingInRange)}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {loadState.data.transactionCount} transactions
-            </Typography>
+          <AdminKpiRow>
+            <AdminKpi label="Approved in range" value={fmt(loadState.data.approvedInRange)} accent="success" />
+            <AdminKpi label="Pending in range" value={fmt(loadState.data.pendingInRange)} accent="warning" />
+            <AdminKpi label="Transactions" value={String(loadState.data.transactionCount)} accent="primary" />
+          </AdminKpiRow>
+        ) : showLoader ? (
+          <Stack alignItems="center" py={4}>
+            <CircularProgress size={28} />
           </Stack>
-        ) : null}
+        ) : (
+          <Typography color="text.secondary">No spend data for this range.</Typography>
+        )}
+      </AdminCard>
 
-        <Divider sx={{ borderColor: "#e8edf2", mb: 2.5 }} />
-
-        <Typography variant="subtitle1" sx={{ fontWeight: 700, color: "#0f172a", mb: 2 }}>
-          By category
-        </Typography>
-
+      <AdminCard title="By category">
         {showLoader ? (
           <Stack alignItems="center" py={6}>
             <CircularProgress size={32} />
@@ -185,7 +152,7 @@ export function EmployeeSpendPage() {
             <EmployeeSpendBarChart chartData={chartData} />
           </Suspense>
         ) : null}
-      </CardContent>
-    </Card>
+      </AdminCard>
+    </AdminPage>
   );
 }

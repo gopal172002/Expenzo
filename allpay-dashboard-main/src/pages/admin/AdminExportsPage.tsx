@@ -1,10 +1,11 @@
 import Download from "@mui/icons-material/Download";
 import AlternateEmail from "@mui/icons-material/AlternateEmail";
-import { Alert, Button, Card, CardContent, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
+import { Alert, Button, Table, TableBody, TableCell, TableHead, TableRow } from "@mui/material";
 import dayjs from "dayjs";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { useState } from "react";
+import { AdminCard, AdminEmptyState, AdminPage, AdminTableShell } from "../../components/admin/ui";
 import { useAdminData } from "../../context/AdminDataContext";
 
 const csvHeaders = [
@@ -104,35 +105,29 @@ export const AdminExportsPage = () => {
   };
 
   return (
-    <Stack spacing={2.5}>
-      <Card sx={{ borderRadius: 3 }}>
-        <CardContent>
-          <Typography variant="h5">
-            Exports
-          </Typography>
-          <Typography color="text.secondary">
-            Downloads follow the filters set on Transactions. Large files are queued.
-          </Typography>
-          <Stack direction="row" spacing={1} mt={2}>
-            <Button variant="contained" startIcon={<Download />} onClick={exportCsv}>
-              Export CSV
-            </Button>
-            <Button variant="outlined" startIcon={<Download />} onClick={exportPdf}>
-              Export PDF
-            </Button>
-            <Button variant="text" startIcon={<AlternateEmail />}>
-              Send to accounting
-            </Button>
-          </Stack>
-          {message && <Alert sx={{ mt: 1.2 }}>{message}</Alert>}
-        </CardContent>
-      </Card>
-
-      <Card sx={{ borderRadius: 3 }}>
-        <CardContent>
-          <Typography variant="h6" fontWeight={700}>
-            Export audit log
-          </Typography>
+    <AdminPage
+      title="Exports"
+      description="Downloads follow the filters set on Transactions. Large files are queued."
+      actions={
+        <>
+          <Button variant="contained" startIcon={<Download />} onClick={exportCsv}>
+            Export CSV
+          </Button>
+          <Button variant="outlined" startIcon={<Download />} onClick={exportPdf}>
+            Export PDF
+          </Button>
+          <Button variant="text" startIcon={<AlternateEmail />}>
+            Send to accounting
+          </Button>
+        </>
+      }
+      alert={message ? <Alert>{message}</Alert> : undefined}
+    >
+      <AdminCard title="Export audit log" variant="flush">
+        <AdminTableShell
+          isEmpty={exportAudits.length === 0}
+          empty={<AdminEmptyState title="No exports yet" description="Export a CSV or PDF to see audit history here." />}
+        >
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -155,8 +150,8 @@ export const AdminExportsPage = () => {
               ))}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
-    </Stack>
+        </AdminTableShell>
+      </AdminCard>
+    </AdminPage>
   );
 };

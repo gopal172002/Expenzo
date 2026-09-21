@@ -1,5 +1,7 @@
 import {authHeaders} from '../../services/auth';
 import {API_BASE} from '../../services/apiConfig';
+import type {LocationPoint} from '../../types';
+import {locationToPaymentPayload} from '../../services/locationSnapshot';
 import type {UpiIntentPayment, UpiIntentStatus} from '../model/types';
 
 export type CreatePaymentBody = {
@@ -14,6 +16,9 @@ export type CreatePaymentBody = {
   mcc?: string;
   paymentMethod: 'UPI_INTENT';
   launchTxnRef: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  locationCapturedAt?: string | null;
 };
 
 export type ResultBody = {
@@ -23,6 +28,9 @@ export type ResultBody = {
   upiTxnRef?: string;
   approvalRefNo?: string;
   responseCode?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  locationCapturedAt?: string | null;
 };
 
 async function parseJson(res: Response): Promise<Record<string, unknown>> {
@@ -40,6 +48,7 @@ async function parseJson(res: Response): Promise<Record<string, unknown>> {
 export function toCreatePaymentBody(
   payment: UpiIntentPayment,
   employeeId: string,
+  location?: LocationPoint,
 ): CreatePaymentBody {
   return {
     paymentId: payment.id,
@@ -53,6 +62,7 @@ export function toCreatePaymentBody(
     mcc: payment.mcc,
     paymentMethod: 'UPI_INTENT',
     launchTxnRef: payment.launchTxnRef,
+    ...locationToPaymentPayload(location ?? null),
   };
 }
 
@@ -105,7 +115,9 @@ export async function submitUpiPaymentResultRemote(
 export async function syncUpiPaymentResult(
   payment: UpiIntentPayment,
   employeeId: string,
+  location?: LocationPoint,
 ): Promise<{ok: boolean; expenseId?: string; status?: UpiIntentStatus}> {
+  const locationFields = locationToPaymentPayload(location ?? null);
   const resultBody: ResultBody = {
     status: payment.status,
     employeeId,
@@ -113,12 +125,15 @@ export async function syncUpiPaymentResult(
     upiTxnRef: payment.upiTxnRef,
     approvalRefNo: payment.approvalRefNo,
     responseCode: payment.upiResponseCode,
+    ...locationFields,
   };
   let remote = await submitUpiPaymentResultRemote(payment.id, resultBody);
   if (remote.ok) {
     return remote;
   }
-  const created = await createUpiPaymentRemote(toCreatePaymentBody(payment, employeeId));
+  const created = await createUpiPaymentRemote(
+    toCreatePaymentBody(payment, employeeId, location ?? null),
+  );
   if (!created.ok) {
     return remote;
   }

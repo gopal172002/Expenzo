@@ -9,8 +9,6 @@ import {
   Alert,
   Box,
   Button,
-  Card,
-  CardContent,
   Checkbox,
   Chip,
   CircularProgress,
@@ -29,7 +27,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TablePagination,
   TableRow,
@@ -43,26 +40,25 @@ import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-quer
 import { useEffect, useMemo, useState } from "react";
 import { Link as RouterLink, useLocation } from "react-router-dom";
 import { adminApi } from "../../api/adminApi";
+import {
+  AdminCard,
+  AdminEmptyState,
+  AdminPage,
+  AdminResultBar,
+  AdminTableShell,
+} from "../../components/admin/ui";
+import { AdminStatusChip } from "../../components/admin/AdminStatusChip";
 import { AllOptionSelect } from "../../components/filters/AllOptionSelect";
 import { useAdminData } from "../../context/AdminDataContext";
-import { PageHeader } from "../../components/layout/PageHeader";
 import { adminKeys } from "../../query/adminKeys";
+import { ADMIN_FILTER_FIELD_SX, ADMIN_FILTER_GRID_SX } from "../../theme";
 import type { TransactionFilters } from "../../types";
 import { inr, STATUS_OPTIONS, statusLabel } from "../../utils/labels";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
-const FILTER_GRID_SX = {
-  display: "grid",
-  gap: 1.5,
-  gridTemplateColumns: {
-    xs: "1fr",
-    sm: "repeat(2, minmax(0, 1fr))",
-    md: "repeat(4, minmax(0, 1fr))",
-  },
-} as const;
-
-const FILTER_FIELD_SX = { width: "100%", minWidth: 0 } as const;
+const FILTER_GRID_SX = ADMIN_FILTER_GRID_SX;
+const FILTER_FIELD_SX = ADMIN_FILTER_FIELD_SX;
 
 function rejectReasonFromDecision(decision?: string): string | null {
   if (!decision) return null;
@@ -238,23 +234,25 @@ export const AdminTransactionsPage = () => {
   };
 
   return (
-    <Stack spacing={2.5}>
-      {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
-      {listError ? <Alert severity="error">{listError}</Alert> : null}
-      <PageHeader
-        title="Transactions"
-        description="Every claim in the workspace. Filters and paging are applied on the server."
-        actions={
-          <Chip
-            color="success"
-            variant="outlined"
-            label={`${total} claim${total === 1 ? "" : "s"} · page ${inr(pageAmount)}`}
-          />
-        }
-      />
-
-      <Card sx={{ overflow: "hidden" }}>
-        <CardContent sx={{ pb: filtersOpen ? 0 : 2, "&:last-child": { pb: filtersOpen ? 0 : 2 } }}>
+    <AdminPage
+      title="Transactions"
+      description="Every claim in the workspace. Filters and paging are applied on the server."
+      actions={
+        <Chip
+          color="success"
+          variant="outlined"
+          label={`${total} claim${total === 1 ? "" : "s"} · page ${inr(pageAmount)}`}
+        />
+      }
+      alert={
+        <>
+          {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
+          {listError ? <Alert severity="error">{listError}</Alert> : null}
+        </>
+      }
+    >
+      <AdminCard variant="flush">
+        <Box sx={{ px: 2, pt: 2, pb: filtersOpen ? 0 : 2 }}>
           <Stack spacing={2}>
             <Stack
               direction={{ xs: "column", sm: "row" }}
@@ -271,7 +269,6 @@ export const AdminTransactionsPage = () => {
                 variant={filtersOpen ? "contained" : "outlined"}
                 color="primary"
                 sx={{
-                  textTransform: "none",
                   fontWeight: 700,
                   alignSelf: { xs: "stretch", sm: "center" },
                   px: 1.75,
@@ -307,7 +304,6 @@ export const AdminTransactionsPage = () => {
                     bgcolor: "background.paper",
                     "& .MuiToggleButton-root": {
                       px: 1.5,
-                      textTransform: "none",
                       fontWeight: 600,
                     },
                   }}
@@ -353,11 +349,7 @@ export const AdminTransactionsPage = () => {
                     ),
                     endAdornment: filters.search ? (
                       <InputAdornment position="end">
-                        <Button
-                          size="small"
-                          onClick={() => setFilters({ search: "" })}
-                          sx={{ minWidth: 0, px: 1, textTransform: "none" }}
-                        >
+                        <Button size="small" onClick={() => setFilters({ search: "" })} sx={{ minWidth: 0, px: 1 }}>
                           Clear
                         </Button>
                       </InputAdornment>
@@ -540,20 +532,10 @@ export const AdminTransactionsPage = () => {
               </Stack>
             </Collapse>
           </Stack>
-        </CardContent>
+        </Box>
 
         <Divider sx={{ mt: filtersOpen ? 2 : 0 }} />
-        <Box
-          sx={{
-            px: 2,
-            py: 1.25,
-            bgcolor: "action.hover",
-            display: "flex",
-            alignItems: "center",
-            gap: 1,
-            flexWrap: "wrap",
-          }}
-        >
+        <AdminResultBar>
           {showBlankLoader ? (
             <Stack direction="row" spacing={1} alignItems="center">
               <CircularProgress size={14} />
@@ -575,15 +557,14 @@ export const AdminTransactionsPage = () => {
               {listLoading ? <CircularProgress size={12} sx={{ ml: 0.5 }} /> : null}
             </>
           )}
-        </Box>
-      </Card>
+        </AdminResultBar>
+      </AdminCard>
 
-      <Card sx={{ borderRadius: 0, overflow: "hidden" }}>
-        <CardContent sx={{ "&:last-child": { pb: 2 } }}>
+      <AdminCard variant="flush">
+        <Box sx={{ px: 2, pt: 2, pb: 1.5 }}>
           <Stack
             direction={{ xs: "column", sm: "row" }}
             spacing={1}
-            mb={1.5}
             flexWrap="wrap"
             useFlexGap
             alignItems={{ sm: "center" }}
@@ -619,39 +600,20 @@ export const AdminTransactionsPage = () => {
               sx={{ minWidth: { xs: "100%", sm: 220 } }}
             />
           </Stack>
+        </Box>
 
-          <TableContainer
-            sx={{
-              width: "100%",
-              maxWidth: "100%",
-              overflowX: "auto",
-              overflowY: "visible",
-              WebkitOverflowScrolling: "touch",
-              border: "1px solid",
-              borderColor: "divider",
-              borderRadius: 0,
-              position: "relative",
-              minHeight: 200,
-            }}
-          >
-            {showBlankLoader ? (
-              <Stack
-                alignItems="center"
-                justifyContent="center"
-                spacing={1}
-                sx={{ py: 6, bgcolor: "rgba(255,255,255,0.7)", position: "absolute", inset: 0, zIndex: 2 }}
-              >
-                <CircularProgress size={28} />
-                <Typography variant="body2" color="text.secondary" fontWeight={650}>
-                  Loading page…
-                </Typography>
-              </Stack>
-            ) : listLoading ? (
-              <Box sx={{ position: "absolute", top: 8, right: 12, zIndex: 2 }}>
-                <CircularProgress size={18} thickness={5} />
-              </Box>
-            ) : null}
-            <Table size="small" sx={{ minWidth: 1080, tableLayout: "auto" }}>
+        <AdminTableShell
+          loading={showBlankLoader}
+          isEmpty={!showBlankLoader && rows.length === 0}
+          empty={<AdminEmptyState title="No claims match these filters" />}
+          sx={{ border: "none", borderRadius: 0, minHeight: 200 }}
+        >
+          {listLoading && !showBlankLoader ? (
+            <Box sx={{ position: "absolute", top: 8, right: 12, zIndex: 2 }}>
+              <CircularProgress size={18} thickness={5} />
+            </Box>
+          ) : null}
+          <Table size="small" sx={{ minWidth: 1080, tableLayout: "auto", opacity: listLoading ? 0.85 : 1 }}>
               <TableHead>
                 <TableRow>
                   <TableCell sx={{ width: 48 }} />
@@ -671,13 +633,6 @@ export const AdminTransactionsPage = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {!showBlankLoader && rows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={10} align="center" sx={{ py: 5 }}>
-                      <Typography color="text.secondary">No claims match these filters</Typography>
-                    </TableCell>
-                  </TableRow>
-                ) : null}
                 {rows.map((tx) => (
                   <TableRow key={tx.id} hover>
                     <TableCell>
@@ -722,17 +677,9 @@ export const AdminTransactionsPage = () => {
                       {dayjs(tx.dateTime).format("DD MMM YYYY, HH:mm")}
                     </TableCell>
                     <TableCell sx={{ whiteSpace: "nowrap" }}>
-                      <Chip
-                        size="small"
-                        color={
-                          tx.status === "approved"
-                            ? "success"
-                            : tx.status === "rejected"
-                              ? "error"
-                              : tx.status === "flagged"
-                                ? "warning"
-                                : "default"
-                        }
+                      <AdminStatusChip
+                        status={tx.status}
+                        label={statusLabel(tx.status)}
                         icon={
                           tx.status === "flagged" ? (
                             <WarningAmber />
@@ -740,7 +687,6 @@ export const AdminTransactionsPage = () => {
                             <CheckCircle />
                           ) : undefined
                         }
-                        label={statusLabel(tx.status)}
                       />
                     </TableCell>
                     <TableCell align="center" sx={{ whiteSpace: "nowrap", minWidth: 220 }}>
@@ -810,7 +756,7 @@ export const AdminTransactionsPage = () => {
                 ))}
               </TableBody>
             </Table>
-          </TableContainer>
+        </AdminTableShell>
 
           <TablePagination
             component="div"
@@ -833,8 +779,7 @@ export const AdminTransactionsPage = () => {
               ".MuiTablePagination-toolbar": { flexWrap: "wrap", gap: 0.5 },
             }}
           />
-        </CardContent>
-      </Card>
+      </AdminCard>
 
       <Dialog
         open={approveDialog.open}
@@ -920,6 +865,6 @@ export const AdminTransactionsPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </Stack>
+    </AdminPage>
   );
 };

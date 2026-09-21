@@ -78,8 +78,8 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-const drawerWidthExpanded = 248;
-const drawerWidthCollapsed = 72;
+const drawerWidthExpanded = SIDEBAR.widthExpanded;
+const drawerWidthCollapsed = SIDEBAR.widthCollapsed;
 
 function initials(value: string): string {
   const parts = value.replace(/@.*/, "").split(/[\s._-]+/).filter(Boolean);
@@ -146,7 +146,7 @@ export const AdminLayout = () => {
               {initials(displayName)}
             </Avatar>
             <Box sx={{ display: { xs: "none", sm: "block" }, textAlign: "left", ml: 1 }}>
-              <Typography variant="body2" fontWeight={650} noWrap sx={{ maxWidth: 180 }}>
+              <Typography variant="body2" fontWeight={600} noWrap sx={{ maxWidth: 180 }}>
                 {displayName}
               </Typography>
               <Typography variant="caption" color="text.secondary" noWrap>
@@ -164,7 +164,7 @@ export const AdminLayout = () => {
             slotProps={{ paper: { sx: { minWidth: 260, mt: 1 } } }}
           >
             <Box sx={{ px: 2, py: 1.5 }}>
-              <Typography fontWeight={650} noWrap>
+              <Typography fontWeight={600} noWrap>
                 {displayName}
               </Typography>
               <Typography variant="body2" color="text.secondary" noWrap>
@@ -237,7 +237,7 @@ export const AdminLayout = () => {
           </Avatar>
           {!collapsed ? (
             <Box>
-              <Typography fontWeight={700} lineHeight={1.1} sx={{ color: "#F9FAFB" }}>
+              <Typography fontWeight={700} lineHeight={1.1} sx={{ color: SIDEBAR.brand }}>
                 AllPay
               </Typography>
               <Typography variant="caption" sx={{ color: SIDEBAR.muted }}>
@@ -289,9 +289,13 @@ export const AdminLayout = () => {
                     justifyContent: collapsed ? "center" : "flex-start",
                     color: selected ? "#fff" : SIDEBAR.text,
                     "&.Mui-selected": { bgcolor: SIDEBAR.selected },
-                    "&.Mui-selected:hover": { bgcolor: "#1D4ED8" },
-                    "&:hover": { bgcolor: selected ? "#1D4ED8" : SIDEBAR.bgHover },
+                    "&.Mui-selected:hover": { bgcolor: SIDEBAR.selectedHover },
+                    "&:hover": { bgcolor: selected ? SIDEBAR.selectedHover : SIDEBAR.bgHover },
                     "&.Mui-selected .MuiListItemIcon-root": { color: "#fff" },
+                    "&:focus-visible": {
+                      outline: `2px solid ${SIDEBAR.selected}`,
+                      outlineOffset: 2,
+                    },
                   }}
                 >
                   <ListItemIcon sx={{ minWidth: collapsed ? 0 : 34, color: selected ? "#fff" : SIDEBAR.muted }}>
@@ -317,7 +321,18 @@ export const AdminLayout = () => {
         ))}
       </Drawer>
 
-      <Box component="main" sx={{ flexGrow: 1, p: { xs: 2, md: 3 }, mt: 8, minWidth: 0 }}>
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          p: { xs: 2, sm: 2.5, md: 3 },
+          mt: 8,
+          minWidth: 0,
+          width: { md: `calc(100% - ${currentWidth}px)` },
+          overflowX: "hidden",
+          bgcolor: "background.default",
+        }}
+      >
         <Outlet />
       </Box>
     </Box>

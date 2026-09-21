@@ -16,7 +16,8 @@ import {storage} from '../services/storage';
 import {clearEmployeeAuth, saveEmployeeAuth} from '../services/auth';
 import {fetchActivePolicies, patchTransactionOnBackend, syncTransactionToBackend} from '../services/sync';
 import {isPaymentCaptured} from '../services/payments';
-import {OnboardingProfile, Receipt, Transaction, UpiApp} from '../types';
+import {capturePaymentLocationSnapshot} from '../services/locationSnapshot';
+import {OnboardingProfile, Receipt, Transaction, UpiApp, type LocationPoint} from '../types';
 import type {ExpensePolicy} from '../utils/policies';
 import type {UpiIntentPayment, UpiIntentStatus} from '../upi/model/types';
 import {createUuid, launchTxnRefFromPaymentId} from '../upi/id';
@@ -52,6 +53,10 @@ type AppContextValue = {
   defaultUpiAppId: string | null;
   locationEnabled: boolean;
   syncMessage: string | null;
+  isOnline: boolean;
+  lastSyncedAt: string | null;
+  queuedCount: number;
+  retrySync: () => Promise<void>;
   completeOnboarding: (profile: OnboardingProfile) => Promise<void>;
   finishEmployeeLogin: (profile: OnboardingProfile, token: string) => Promise<void>;
   submitForReimbursement: (id: string, purpose: string, note: string) => Promise<void>;
@@ -85,6 +90,8 @@ export const AppProvider = ({children}: {children: React.ReactNode}) => {
   const [defaultUpiAppId, setDefaultUpiAppId] = useState<string | null>(null);
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState(true);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
 
   const transactionsRef = useRef<Transaction[]>([]);
   const upiPaymentsRef = useRef<UpiIntentPayment[]>([]);
@@ -117,6 +124,7 @@ export const AppProvider = ({children}: {children: React.ReactNode}) => {
       }
       const updated = {...tx, syncStatus: 'synced' as const};
       setSyncMessage(`Synced transaction ${updated.id}`);
+      setLastSyncedAt(new Date().toISOString());
       return updated;
     },
     [],
@@ -125,13 +133,17 @@ export const AppProvider = ({children}: {children: React.ReactNode}) => {
   const flushQueued = useCallback(async () => {
     const net = await NetInfo.fetch();
     if (!net.isConnected) {
+      setIsOnline(false);
+      setSyncMessage('Offline — expenses stay on this device until you reconnect.');
       return;
     }
+    setIsOnline(true);
     const current = transactionsRef.current;
     const queued = current.filter(item => item.syncStatus === 'queued');
     if (!queued.length) {
       return;
     }
+    setSyncMessage(`Syncing ${queued.length} queued expense${queued.length === 1 ? '' : 's'}…`);
     const next = [...current];
     for (const tx of queued) {
       const synced = await syncSingleIfOnline(tx);
@@ -141,7 +153,18 @@ export const AppProvider = ({children}: {children: React.ReactNode}) => {
       }
     }
     await saveTransactions(next);
+    const stillQueued = next.filter(item => item.syncStatus === 'queued').length;
+    if (stillQueued === 0) {
+      setSyncMessage('All expenses synced to your company account.');
+      setLastSyncedAt(new Date().toISOString());
+    } else {
+      setSyncMessage(`${stillQueued} expense${stillQueued === 1 ? '' : 's'} still waiting to sync.`);
+    }
   }, [saveTransactions, syncSingleIfOnline]);
+
+  const retrySync = useCallback(async () => {
+    await flushQueued();
+  }, [flushQueued]);
 
   useEffect(() => {
     const bootstrap = async () => {
@@ -183,8 +206,12 @@ export const AppProvider = ({children}: {children: React.ReactNode}) => {
 
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(state => {
-      if (state.isConnected) {
+      const online = Boolean(state.isConnected);
+      setIsOnline(online);
+      if (online) {
         flushQueued().catch(() => null);
+      } else {
+        setSyncMessage('Offline — expenses stay on this device until you reconnect.');
       }
     });
     return unsubscribe;
@@ -306,7 +333,11 @@ export const AppProvider = ({children}: {children: React.ReactNode}) => {
   }, []);
 
   const upsertExpenseForPayment = useCallback(
-    async (payment: UpiIntentPayment, remoteExpenseId?: string) => {
+    async (
+      payment: UpiIntentPayment,
+      remoteExpenseId?: string,
+      location: LocationPoint = null,
+    ) => {
       const activeProfile = profileRef.current;
       if (!activeProfile || !shouldCreateExpense(payment.status)) {
         return;
@@ -314,7 +345,12 @@ export const AppProvider = ({children}: {children: React.ReactNode}) => {
       if (transactionsRef.current.some(item => item.paymentId === payment.id)) {
         return;
       }
-      const expense = expenseFromPayment(payment, activeProfile.employeeId, remoteExpenseId);
+      const expense = expenseFromPayment(
+        payment,
+        activeProfile.employeeId,
+        remoteExpenseId,
+        location,
+      );
       await saveTransactions([expense, ...transactionsRef.current]);
       trackUpiEvent('expense_created_from_upi');
       const net = await NetInfo.fetch();
@@ -411,17 +447,26 @@ export const AppProvider = ({children}: {children: React.ReactNode}) => {
       await saveUpiPayments(
         upiPaymentsRef.current.map(item => (item.id === paymentId ? updated : item)),
       );
+
+      // One-shot GPS at payment confirmation — never blocks the payment flow.
+      let location: LocationPoint = null;
+      if (shouldCreateExpense(updated.status)) {
+        const snapshot = await capturePaymentLocationSnapshot(locationEnabled);
+        location = snapshot.location;
+      }
+
       const employeeId = profileRef.current?.employeeId ?? updated.userId;
-      const remote = await syncUpiPaymentResult(updated, employeeId);
+      const remote = await syncUpiPaymentResult(updated, employeeId, location);
       if (shouldCreateExpense(updated.status)) {
         await upsertExpenseForPayment(
           {...updated, expenseId: remote.expenseId ?? updated.expenseId},
           remote.expenseId,
+          location,
         );
       }
       return updated;
     },
-    [saveUpiPayments, upsertExpenseForPayment],
+    [locationEnabled, saveUpiPayments, upsertExpenseForPayment],
   );
 
   const logout = useCallback(async () => {
@@ -439,6 +484,11 @@ export const AppProvider = ({children}: {children: React.ReactNode}) => {
     setSyncMessage(null);
   }, []);
 
+  const queuedCount = useMemo(
+    () => transactions.filter(item => item.syncStatus === 'queued').length,
+    [transactions],
+  );
+
   const value = useMemo<AppContextValue>(
     () => ({
       profile,
@@ -449,6 +499,10 @@ export const AppProvider = ({children}: {children: React.ReactNode}) => {
       defaultUpiAppId,
       locationEnabled,
       syncMessage,
+      isOnline,
+      lastSyncedAt,
+      queuedCount,
+      retrySync,
       completeOnboarding,
       finishEmployeeLogin,
       submitForReimbursement,
@@ -469,11 +523,15 @@ export const AppProvider = ({children}: {children: React.ReactNode}) => {
       finishEmployeeLogin,
       defaultUpiAppId,
       installedUpiApps,
+      isOnline,
+      lastSyncedAt,
       locationEnabled,
       markUpiAppOpened,
       profile,
       policies,
+      queuedCount,
       refreshInstalledUpiApps,
+      retrySync,
       setDefaultUpiApp,
       setLocationCaptureEnabled,
       logout,

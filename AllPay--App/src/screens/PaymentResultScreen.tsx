@@ -3,14 +3,18 @@ import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import React, {useMemo} from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import {
+  ErrorState,
+  InfoBanner,
+  PaymentStatusCard,
   PrimaryButton,
   Screen,
   ScreenHeader,
   SecondaryButton,
-  StatusPill,
+  Section,
 } from '../components/UI';
 import {useAppData} from '../context/AppContext';
 import {RootStackParamList} from '../navigation';
+import {colors, spacing} from '../theme/tokens';
 import {maskRef} from '../upi/mask';
 import {paiseToRupeeLabel} from '../upi/money';
 import {expenseIdForPayment} from '../upi/payment/expenseFromPayment';
@@ -21,7 +25,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 export const PaymentResultScreen = () => {
   const navigation = useNavigation<Nav>();
   const {paymentId} = useRoute<Route>().params;
-  const {upiPayments, applyUpiPaymentStatus, transactions} = useAppData();
+  const {upiPayments, applyUpiPaymentStatus, transactions, isOnline, queuedCount} = useAppData();
   const payment = useMemo(
     () => upiPayments.find(item => item.id === paymentId),
     [paymentId, upiPayments],
@@ -38,7 +42,13 @@ export const PaymentResultScreen = () => {
     return (
       <Screen safeTop={false}>
         <View style={styles.centered}>
-          <Text style={styles.body}>Payment not found.</Text>
+          <ErrorState
+            title="Payment not found"
+            description="This payment may have been cleared from local storage."
+            action={
+              <SecondaryButton label="Back to Home" onPress={() => navigation.popToTop()} />
+            }
+          />
         </View>
       </Screen>
     );
@@ -49,7 +59,7 @@ export const PaymentResultScreen = () => {
 
   const title =
     status === 'SUCCESS_REPORTED'
-      ? 'Payment recorded'
+      ? 'Success reported'
       : status === 'FAILED'
         ? 'Payment failed'
         : status === 'PENDING'
@@ -58,29 +68,28 @@ export const PaymentResultScreen = () => {
             ? 'Payment cancelled'
             : status === 'USER_CONFIRMED'
               ? 'Recorded by you'
-              : 'Payment status unavailable';
+              : status === 'UPI_APP_OPENED'
+                ? 'UPI app opened'
+                : status === 'INITIATED'
+                  ? 'Payment initiated'
+                  : 'Status unknown';
 
   const subtitle =
     status === 'SUCCESS_REPORTED'
-      ? 'UPI payment reported successful'
+      ? 'Your UPI app reported a successful payment. AllPay recorded this expense for your company — this is not an independent bank settlement confirmation.'
       : status === 'FAILED'
-        ? 'Bank or UPI app declined this payment (often “UPI risk policy” on personal IDs). No expense was added. Try PhonePe/Google Pay or scan the payment QR on the confirm screen.'
+        ? 'The bank or UPI app declined this payment. No expense was added. You can try again with another UPI app or a merchant QR.'
         : status === 'PENDING'
-          ? 'The UPI app reported that this transaction is still pending. Do not pay again unless you know the first payment failed.'
+          ? 'The UPI app reported that this transaction is still pending. Do not pay again unless you know the first attempt failed.'
           : status === 'CANCELLED'
-            ? 'The UPI app was closed before a result was returned.'
+            ? 'The UPI app was closed before a result was returned. No expense was added.'
             : status === 'USER_CONFIRMED'
-              ? 'You confirmed this payment. This is not a UPI app success callback.'
+              ? 'You confirmed this payment manually. This is not a UPI success callback — finance may ask for proof.'
               : status === 'UPI_APP_OPENED'
-                ? 'Your UPI app was opened. Complete payment there, then return and tap I paid — record expense if money was sent.'
-                : "We couldn't determine the result of this payment. If you already paid, tap Record manually.";
-
-  const toneStyle =
-    status === 'SUCCESS_REPORTED'
-      ? styles.successBox
-      : status === 'FAILED' || status === 'CANCELLED'
-        ? styles.failBox
-        : styles.warnBox;
+                ? 'Your UPI app was opened. Complete the payment there, then return. Opening the app alone does not mean the payment succeeded.'
+                : status === 'INITIATED'
+                  ? 'Payment was created but the UPI app has not returned a result yet.'
+                  : "We could not determine the result. If money left your account, record the expense below — otherwise try again.";
 
   const openExpense = () => {
     const id = expense?.id ?? expenseIdForPayment(payment.id);
@@ -88,34 +97,57 @@ export const PaymentResultScreen = () => {
   };
 
   const recordManuallyLabel =
-    status === 'UPI_APP_OPENED' || status === 'UNKNOWN'
+    status === 'UPI_APP_OPENED' || status === 'UNKNOWN' || status === 'INITIATED'
       ? 'I paid — record expense'
       : 'Record manually';
 
+  const expenseStatus = expense?.status ?? 'Not created yet';
+
   return (
     <Screen safeTop={false}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <ScreenHeader title={title} subtitle={payment.payeeName} />
-        <View style={[styles.box, toneStyle]}>
-          <Text style={styles.amount}>{amountLabel}</Text>
-          <Text style={styles.payee}>{payment.payeeName}</Text>
-          <StatusPill status={status} />
-          <Text style={styles.body}>{subtitle}</Text>
-          {status === 'SUCCESS_REPORTED' ? (
-            <Text style={styles.ref}>Reference: {maskRef(payment.upiTxnId ?? payment.upiTxnRef)}</Text>
-          ) : null}
-          {status === 'SUCCESS_REPORTED' ? (
-            <Text style={styles.body}>Added to your expenses.</Text>
-          ) : null}
-        </View>
+        <PaymentStatusCard
+          amount={amountLabel}
+          payee={payment.payeeName}
+          status={status}
+          explanation={subtitle}
+          reference={
+            status === 'SUCCESS_REPORTED'
+              ? maskRef(payment.upiTxnId ?? payment.upiTxnRef)
+              : undefined
+          }
+        />
+
+        <Section title="What this means">
+          <Text style={styles.body}>
+            <Text style={styles.strong}>Payment status</Text> is what your UPI app reported to
+            AllPay.
+          </Text>
+          <Text style={[styles.body, styles.bodySpaced]}>
+            <Text style={styles.strong}>Expense / reimbursement</Text>: {expenseStatus}. Finance
+            decides approval later — a recorded payment is not an approved claim.
+          </Text>
+        </Section>
+
+        {!isOnline ? (
+          <InfoBanner tone="offline" title="Offline result">
+            This result is saved on your device
+            {queuedCount > 0 ? ` (${queuedCount} queued)` : ''}. It will sync to your company
+            account when you reconnect.
+          </InfoBanner>
+        ) : null}
 
         {status === 'SUCCESS_REPORTED' || status === 'USER_CONFIRMED' ? (
-          <PrimaryButton label="View expense" onPress={openExpense} />
+          <>
+            <PrimaryButton label="View expense" onPress={openExpense} />
+            <SecondaryButton label="Add receipt" onPress={openExpense} />
+          </>
         ) : null}
 
         {status === 'FAILED' || status === 'CANCELLED' ? (
           <PrimaryButton
-            label="Try again"
+            label="Retry payment"
             onPress={() =>
               navigation.replace('Payment', {
                 merchant: {
@@ -131,7 +163,10 @@ export const PaymentResultScreen = () => {
           />
         ) : null}
 
-        {status === 'UNKNOWN' || status === 'PENDING' || status === 'UPI_APP_OPENED' || status === 'INITIATED' ? (
+        {status === 'UNKNOWN' ||
+        status === 'PENDING' ||
+        status === 'UPI_APP_OPENED' ||
+        status === 'INITIATED' ? (
           <>
             <PrimaryButton
               label={recordManuallyLabel}
@@ -140,12 +175,12 @@ export const PaymentResultScreen = () => {
               }}
             />
             <SecondaryButton
-              label={status === 'PENDING' ? 'Keep pending' : 'Dismiss'}
+              label={status === 'PENDING' ? 'Keep pending' : 'Return to Home'}
               onPress={() => navigation.popToTop()}
             />
           </>
         ) : (
-          <SecondaryButton label="Done" onPress={() => navigation.popToTop()} />
+          <SecondaryButton label="Return to Home" onPress={() => navigation.popToTop()} />
         )}
       </ScrollView>
     </Screen>
@@ -154,50 +189,26 @@ export const PaymentResultScreen = () => {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 18,
-    paddingBottom: 24,
+    padding: spacing.page,
+    paddingBottom: 28,
     flexGrow: 1,
   },
   centered: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  box: {
-    borderRadius: 8,
-    borderWidth: 1,
-    padding: 16,
-    marginBottom: 12,
-    gap: 8,
-  },
-  successBox: {
-    backgroundColor: '#ecfdf5',
-    borderColor: '#bbf7d0',
-  },
-  failBox: {
-    backgroundColor: '#fef2f2',
-    borderColor: '#fecaca',
-  },
-  warnBox: {
-    backgroundColor: '#fffbeb',
-    borderColor: '#fde68a',
-  },
-  amount: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#0f172a',
-  },
-  payee: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0f172a',
+    padding: spacing.page,
   },
   body: {
-    color: '#334155',
+    color: colors.textSecondary,
     lineHeight: 20,
+    fontSize: 14,
   },
-  ref: {
-    color: '#475569',
+  bodySpaced: {
+    marginTop: 8,
+  },
+  strong: {
     fontWeight: '700',
+    color: colors.navy,
   },
 });

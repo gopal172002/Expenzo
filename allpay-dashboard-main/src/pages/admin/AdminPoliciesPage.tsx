@@ -1,12 +1,9 @@
 import Add from "@mui/icons-material/Add";
 import DeleteOutline from "@mui/icons-material/DeleteOutline";
-import PolicyOutlined from "@mui/icons-material/PolicyOutlined";
 import {
   Alert,
   Box,
   Button,
-  Card,
-  CardContent,
   Chip,
   IconButton,
   MenuItem,
@@ -23,9 +20,11 @@ import {
 import dayjs from "dayjs";
 import { useEffect, useReducer, useState } from "react";
 import { adminApi, type PolicyPreviewResponse } from "../../api/adminApi";
+import { AdminCard, AdminEmptyState, AdminPage, AdminTableShell } from "../../components/admin/ui";
 import { POLICY_CATEGORIES } from "../../constants/policyCategories";
 import { useAdminData } from "../../context/AdminDataContext";
 import type { ExpensePolicy } from "../../types";
+import { inr } from "../../utils/labels";
 
 const weekdayOptions = [
   { label: "Mon", value: 1 },
@@ -106,175 +105,164 @@ export const AdminPoliciesPage = () => {
     policy.name.trim().length > 0 && (!scopeNeedsValue || Boolean(policy.scopeValue?.trim()));
 
   return (
-    <Stack spacing={2.5}>
-      <Card sx={{ borderRadius: 3 }}>
-        <CardContent>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <PolicyOutlined color="primary" />
-            <Typography variant="h5">
-              Expense policies
-            </Typography>
-          </Stack>
-          <Typography color="text.secondary">
-            Configure spend limits by category (food, fuel, travel, etc.). Active policies are enforced in the employee app and on transaction sync.
-          </Typography>
-        </CardContent>
-      </Card>
-
-      <Card sx={{ borderRadius: 3 }}>
-        <CardContent>
-          <Typography variant="h6" fontWeight={700} mb={1.5}>
-            Create policy
-          </Typography>
-          <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
-            <TextField
-              label="Policy name"
-              value={policy.name}
-              onChange={(e) => setPolicy({ ...policy, name: e.target.value })}
-            />
-            <TextField
-              select
-              label="Category"
-              value={policy.mccCategory}
-              onChange={(e) => setPolicy({ ...policy, mccCategory: e.target.value })}
-            >
-              {POLICY_CATEGORIES.map((cat) => (
-                <MenuItem key={cat.value} value={cat.value}>
-                  {cat.label}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              type="number"
-              label="Max per transaction"
-              value={policy.maxPerTransaction}
-              onChange={(e) => setPolicy({ ...policy, maxPerTransaction: Number(e.target.value) })}
-            />
-            <TextField
-              type="number"
-              label="Max per month"
-              value={policy.maxPerMonth}
-              onChange={(e) => setPolicy({ ...policy, maxPerMonth: Number(e.target.value) })}
-            />
-          </Stack>
-          <Stack direction={{ xs: "column", md: "row" }} spacing={1} mt={1}>
-            <TextField
-              select
-              label="Scope type"
-              value={policy.scopeType}
-              onChange={(e) =>
-                setPolicy({ ...policy, scopeType: e.target.value as ExpensePolicy["scopeType"] })
-              }
-            >
-              <MenuItem value="all">All employees</MenuItem>
-              <MenuItem value="department">Department</MenuItem>
-              <MenuItem value="employee">Individual employee</MenuItem>
-            </TextField>
-            <TextField
-              label="Scope value"
-              disabled={!scopeNeedsValue}
-              helperText={scopeNeedsValue ? "Department name or employee ID" : "Not required for all employees"}
-              value={policy.scopeValue || ""}
-              onChange={(e) => setPolicy({ ...policy, scopeValue: e.target.value })}
-            />
-            <TextField
-              type="date"
-              label="Start date"
-              InputLabelProps={{ shrink: true }}
-              value={policy.startDate}
-              onChange={(e) => setPolicy({ ...policy, startDate: e.target.value })}
-            />
-            <TextField
-              type="date"
-              label="End date"
-              InputLabelProps={{ shrink: true }}
-              value={policy.endDate || ""}
-              onChange={(e) => setPolicy({ ...policy, endDate: e.target.value })}
-            />
-          </Stack>
-          <Stack direction="row" spacing={1} mt={1.2} flexWrap="wrap">
-            {weekdayOptions.map((day) => (
-              <Chip
-                key={day.value}
-                clickable
-                color={policy.allowedDays.includes(day.value) ? "primary" : "default"}
-                label={day.label}
-                onClick={() =>
-                  setPolicy((prev) => ({
-                    ...prev,
-                    allowedDays: prev.allowedDays.includes(day.value)
-                      ? prev.allowedDays.filter((item) => item !== day.value)
-                      : [...prev.allowedDays, day.value],
-                  }))
-                }
-              />
+    <AdminPage
+      title="Expense policies"
+      description="Configure spend limits by category (food, fuel, travel, etc.). Active policies are enforced in the employee app and on transaction sync."
+    >
+      <AdminCard title="Create policy">
+        <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+          <TextField
+            label="Policy name"
+            value={policy.name}
+            onChange={(e) => setPolicy({ ...policy, name: e.target.value })}
+          />
+          <TextField
+            select
+            label="Category"
+            value={policy.mccCategory}
+            onChange={(e) => setPolicy({ ...policy, mccCategory: e.target.value })}
+          >
+            {POLICY_CATEGORIES.map((cat) => (
+              <MenuItem key={cat.value} value={cat.value}>
+                {cat.label}
+              </MenuItem>
             ))}
-          </Stack>
-          <Stack direction="row" spacing={1} mt={2}>
-            <Button
-              variant="contained"
-              startIcon={<Add />}
-              disabled={isSaving || !canActivate}
-              onClick={async () => {
-                setCreatedInfo("");
-                try {
-                  const draft = {
-                    ...policy,
-                    id: "",
-                    name: policy.name.trim(),
-                    scopeValue: scopeNeedsValue ? policy.scopeValue?.trim() : "",
-                  };
-                  const prev = await adminApi.previewPolicy(draft);
-                  await createPolicy(draft);
-                  setCreatedInfo(
-                    `Policy "${draft.name}" activated. Server preview: ${prev.wouldFlagCount} transactions would have been flagged; ${prev.affectedEmployeeCount} employees affected.`
-                  );
-                  setPolicy((p) => ({
-                    ...p,
-                    id: "POL-draft",
-                    name: "",
-                  }));
-                } catch {
-                  /* errorMessage shown below */
-                }
-              }}
-            >
-              Activate policy
-            </Button>
+          </TextField>
+          <TextField
+            type="number"
+            label="Max per transaction"
+            value={policy.maxPerTransaction}
+            onChange={(e) => setPolicy({ ...policy, maxPerTransaction: Number(e.target.value) })}
+          />
+          <TextField
+            type="number"
+            label="Max per month"
+            value={policy.maxPerMonth}
+            onChange={(e) => setPolicy({ ...policy, maxPerMonth: Number(e.target.value) })}
+          />
+        </Stack>
+        <Stack direction={{ xs: "column", md: "row" }} spacing={1} mt={1}>
+          <TextField
+            select
+            label="Scope type"
+            value={policy.scopeType}
+            onChange={(e) =>
+              setPolicy({ ...policy, scopeType: e.target.value as ExpensePolicy["scopeType"] })
+            }
+          >
+            <MenuItem value="all">All employees</MenuItem>
+            <MenuItem value="department">Department</MenuItem>
+            <MenuItem value="employee">Individual employee</MenuItem>
+          </TextField>
+          <TextField
+            label="Scope value"
+            disabled={!scopeNeedsValue}
+            helperText={scopeNeedsValue ? "Department name or employee ID" : "Not required for all employees"}
+            value={policy.scopeValue || ""}
+            onChange={(e) => setPolicy({ ...policy, scopeValue: e.target.value })}
+          />
+          <TextField
+            type="date"
+            label="Start date"
+            InputLabelProps={{ shrink: true }}
+            value={policy.startDate}
+            onChange={(e) => setPolicy({ ...policy, startDate: e.target.value })}
+          />
+          <TextField
+            type="date"
+            label="End date"
+            InputLabelProps={{ shrink: true }}
+            value={policy.endDate || ""}
+            onChange={(e) => setPolicy({ ...policy, endDate: e.target.value })}
+          />
+        </Stack>
+        <Stack direction="row" spacing={1} mt={1.2} flexWrap="wrap">
+          {weekdayOptions.map((day) => (
             <Chip
-              color="warning"
-              label={
-                preview.previewLoading
-                  ? "Server preview…"
-                  : `Server preview: ${preview.serverPreview?.wouldFlagCount ?? "—"} matches`
+              key={day.value}
+              clickable
+              color={policy.allowedDays.includes(day.value) ? "primary" : "default"}
+              label={day.label}
+              onClick={() =>
+                setPolicy((prev) => ({
+                  ...prev,
+                  allowedDays: prev.allowedDays.includes(day.value)
+                    ? prev.allowedDays.filter((item) => item !== day.value)
+                    : [...prev.allowedDays, day.value],
+                }))
               }
             />
-            {preview.serverPreview != null && !preview.previewLoading ? (
-              <Chip
-                color="info"
-                label={`Employees: ${preview.serverPreview.affectedEmployeeCount} · Est. savings: Rs.${preview.serverPreview.estimatedSavingsIfRejected.toLocaleString("en-IN")}`}
-              />
-            ) : null}
-          </Stack>
-          {preview.previewError ? (
-            <Alert severity="warning" sx={{ mt: 1 }}>
-              {preview.previewError}
-            </Alert>
+          ))}
+        </Stack>
+        <Stack direction="row" spacing={1} mt={2}>
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            disabled={isSaving || !canActivate}
+            onClick={async () => {
+              setCreatedInfo("");
+              try {
+                const draft = {
+                  ...policy,
+                  id: "",
+                  name: policy.name.trim(),
+                  scopeValue: scopeNeedsValue ? policy.scopeValue?.trim() : "",
+                };
+                const prev = await adminApi.previewPolicy(draft);
+                await createPolicy(draft);
+                setCreatedInfo(
+                  `Policy "${draft.name}" activated. Server preview: ${prev.wouldFlagCount} transactions would have been flagged; ${prev.affectedEmployeeCount} employees affected.`
+                );
+                setPolicy((p) => ({
+                  ...p,
+                  id: "POL-draft",
+                  name: "",
+                }));
+              } catch {
+                /* errorMessage shown below */
+              }
+            }}
+          >
+            Activate policy
+          </Button>
+          <Chip
+            color="warning"
+            label={
+              preview.previewLoading
+                ? "Server preview…"
+                : `Server preview: ${preview.serverPreview?.wouldFlagCount ?? "—"} matches`
+            }
+          />
+          {preview.serverPreview != null && !preview.previewLoading ? (
+            <Chip
+              color="info"
+              label={`Employees: ${preview.serverPreview.affectedEmployeeCount} · Est. savings: ${inr(preview.serverPreview.estimatedSavingsIfRejected)}`}
+            />
           ) : null}
-          {createdInfo && <Alert sx={{ mt: 1.4 }}>{createdInfo}</Alert>}
-          {errorMessage ? (
-            <Alert severity="error" sx={{ mt: 1.2 }}>
-              {errorMessage}
-            </Alert>
-          ) : null}
-        </CardContent>
-      </Card>
+        </Stack>
+        {preview.previewError ? (
+          <Alert severity="warning" sx={{ mt: 1 }}>
+            {preview.previewError}
+          </Alert>
+        ) : null}
+        {createdInfo && <Alert sx={{ mt: 1.4 }}>{createdInfo}</Alert>}
+        {errorMessage ? (
+          <Alert severity="error" sx={{ mt: 1.2 }}>
+            {errorMessage}
+          </Alert>
+        ) : null}
+      </AdminCard>
 
-      <Card sx={{ borderRadius: 3 }}>
-        <CardContent>
-          <Typography variant="h6" fontWeight={700} mb={1}>
-            Active policies
-          </Typography>
+      <AdminCard title="Active policies" variant="flush">
+        <AdminTableShell
+          isEmpty={policies.length === 0}
+          empty={
+            <AdminEmptyState
+              title="No policies yet"
+              description="Create a food expense limit or spend cap above."
+            />
+          }
+        >
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -287,65 +275,55 @@ export const AdminPoliciesPage = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {policies.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6}>
-                    <Typography variant="body2" color="text.secondary">
-                      No policies yet. Create a food expense limit or spend cap above.
-                    </Typography>
+              {policies.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell>{item.name}</TableCell>
+                  <TableCell>{categoryLabel(item.mccCategory)}</TableCell>
+                  <TableCell>
+                    {item.scopeType === "all" ? "All" : `${item.scopeType}: ${item.scopeValue}`}
+                  </TableCell>
+                  <TableCell>
+                    {inr(item.maxPerTransaction)} / {inr(item.maxPerMonth)}
+                  </TableCell>
+                  <TableCell>
+                    {item.startDate} to {item.endDate || "Open-ended"}
+                  </TableCell>
+                  <TableCell align="right">
+                    <Tooltip title="Delete policy">
+                      <span>
+                        <IconButton
+                          size="small"
+                          color="error"
+                          disabled={isSaving || deletingId === item.id}
+                          onClick={async () => {
+                            if (!window.confirm(`Delete policy "${item.name}"?`)) return;
+                            setDeletingId(item.id);
+                            try {
+                              await deletePolicy(item.id);
+                              setCreatedInfo(`Policy "${item.name}" deleted.`);
+                            } catch {
+                              /* error shown via context */
+                            } finally {
+                              setDeletingId(null);
+                            }
+                          }}
+                        >
+                          <DeleteOutline fontSize="small" />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
                   </TableCell>
                 </TableRow>
-              ) : (
-                policies.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell>{item.name}</TableCell>
-                    <TableCell>{categoryLabel(item.mccCategory)}</TableCell>
-                    <TableCell>
-                      {item.scopeType === "all" ? "All" : `${item.scopeType}: ${item.scopeValue}`}
-                    </TableCell>
-                    <TableCell>
-                      Rs.{item.maxPerTransaction} / Rs.{item.maxPerMonth}
-                    </TableCell>
-                    <TableCell>
-                      {item.startDate} to {item.endDate || "Open-ended"}
-                    </TableCell>
-                    <TableCell align="right">
-                      <Tooltip title="Delete policy">
-                        <span>
-                          <IconButton
-                            size="small"
-                            color="error"
-                            disabled={isSaving || deletingId === item.id}
-                            onClick={async () => {
-                              if (!window.confirm(`Delete policy "${item.name}"?`)) return;
-                              setDeletingId(item.id);
-                              try {
-                                await deletePolicy(item.id);
-                                setCreatedInfo(`Policy "${item.name}" deleted.`);
-                              } catch {
-                                /* error shown via context */
-                              } finally {
-                                setDeletingId(null);
-                              }
-                            }}
-                          >
-                            <DeleteOutline fontSize="small" />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
+              ))}
             </TableBody>
           </Table>
-          <Box mt={1}>
-            <Typography variant="caption" color="text.secondary">
-              Conflict resolution: most restrictive matching policy applies. Deleted policies stop enforcing immediately in the employee app.
-            </Typography>
-          </Box>
-        </CardContent>
-      </Card>
-    </Stack>
+        </AdminTableShell>
+        <Box sx={{ px: 2, py: 1 }}>
+          <Typography variant="caption" color="text.secondary">
+            Conflict resolution: most restrictive matching policy applies. Deleted policies stop enforcing immediately in the employee app.
+          </Typography>
+        </Box>
+      </AdminCard>
+    </AdminPage>
   );
 };

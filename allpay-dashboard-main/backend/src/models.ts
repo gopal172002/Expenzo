@@ -198,6 +198,12 @@ export interface ITransaction extends Document {
   policyWarning?: string;
   warningAcknowledged?: boolean;
   mobileLocation?: unknown;
+  /** One-shot GPS latitude at payment confirmation (nullable when denied/unavailable). */
+  latitude?: number | null;
+  /** One-shot GPS longitude at payment confirmation. */
+  longitude?: number | null;
+  /** ISO timestamp when the GPS snapshot was taken. */
+  locationCapturedAt?: string | null;
   mobileReceipts?: unknown[];
   lastSyncedFromMobileAt?: string;
   paymentStatus?: string;
@@ -259,6 +265,9 @@ const TransactionSchema = new Schema<ITransaction>({
   policyWarning: { type: String },
   warningAcknowledged: { type: Boolean },
   mobileLocation: { type: Schema.Types.Mixed },
+  latitude: { type: Number, default: null },
+  longitude: { type: Number, default: null },
+  locationCapturedAt: { type: String, default: null },
   mobileReceipts: { type: [Schema.Types.Mixed], default: [] },
   lastSyncedFromMobileAt: { type: String },
   paymentStatus: { type: String, default: "draft" },
@@ -511,6 +520,9 @@ export interface IUpiIntentPayment extends Document {
   returnedAt?: string;
   completedAt?: string;
   expenseId?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  locationCapturedAt?: string | null;
 }
 
 const UpiIntentPaymentSchema = new Schema<IUpiIntentPayment>({
@@ -535,6 +547,9 @@ const UpiIntentPaymentSchema = new Schema<IUpiIntentPayment>({
   returnedAt: { type: String },
   completedAt: { type: String },
   expenseId: { type: String },
+  latitude: { type: Number, default: null },
+  longitude: { type: Number, default: null },
+  locationCapturedAt: { type: String, default: null },
 });
 
 export const UpiIntentPayment = mongoose.model<IUpiIntentPayment>(

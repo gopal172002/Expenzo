@@ -16,16 +16,31 @@ export function isLegacyAllPayInviteCode(code: string): boolean {
   return /^ALLPAY[A-Z0-9]{6}$/.test(normalizeInviteCode(code));
 }
 
-export function buildInviteCode(prefix: string, employeeId: string): string {
-  const p = normalizeInvitePrefix(prefix);
-  const id = String(employeeId || "")
+/** Strip employee id to the invite-code suffix (e.g. EMP-1000 → EMP1000). */
+export function normalizeEmployeeIdForInvite(employeeId: string): string {
+  return String(employeeId || "")
     .trim()
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "");
+}
+
+export function buildInviteCode(prefix: string, employeeId: string): string {
+  const p = normalizeInvitePrefix(prefix);
+  const id = normalizeEmployeeIdForInvite(employeeId);
   if (p.length < 2 || !id) {
     throw new Error("Invite code requires a company prefix and employee id");
   }
   return `${p}_${id}`;
+}
+
+/** Parse PREFIX_EMPLOYEEID codes entered in the mobile app. */
+export function parsePrefixInviteCode(
+  raw: string
+): { prefix: string; employeeIdKey: string } | null {
+  const code = normalizeInviteCode(raw);
+  const match = /^([A-Z0-9]{2,6})_([A-Z0-9]+)$/.exec(code);
+  if (!match) return null;
+  return { prefix: match[1]!, employeeIdKey: match[2]! };
 }
 
 /**
@@ -69,11 +84,53 @@ export async function generateLegacyAllPayInviteCode(): Promise<string> {
   throw new Error("Could not generate a unique invite code");
 }
 
-/** Resolve employee by invite code globally (mobile onboarding / login). */
+/**
+ * Resolve employee by invite code globally (mobile onboarding / login).
+ * 1) Exact inviteCode match
+ * 2) PREFIX_EMPLOYEEID fallback (heals stale/legacy stored codes like ALLPAY123)
+ */
 export async function findEmployeeByInviteCode(raw: string) {
   const code = normalizeInviteCode(raw);
   if (!code) return null;
-  return Employee.findOne({ inviteCode: code, active: true }).exec();
+
+  const byCode = await Employee.findOne({ inviteCode: code, active: true }).exec();
+  if (byCode) return byCode;
+
+  const parsed = parsePrefixInviteCode(code);
+  if (!parsed) return null;
+
+  const company = await Company.findOne({ invitePrefix: parsed.prefix })
+    .select({ id: 1, invitePrefix: 1 })
+    .lean()
+    .exec();
+  if (!company?.id) return null;
+
+  const candidates = await Employee.find({ companyId: company.id, active: true }).exec();
+  const emp = candidates.find(
+    (row) => normalizeEmployeeIdForInvite(row.id) === parsed.employeeIdKey
+  );
+  if (!emp) return null;
+
+  // Heal stale inviteCode so admin UI and future logins stay in sync.
+  const desired = buildInviteCode(parsed.prefix, emp.id);
+  if (normalizeInviteCode(emp.inviteCode || "") !== desired) {
+    const taken = await Employee.findOne({
+      inviteCode: desired,
+      _id: { $ne: emp._id },
+    })
+      .select("_id")
+      .lean()
+      .exec();
+    if (!taken) {
+      emp.inviteCode = desired;
+      try {
+        await emp.save();
+      } catch {
+        // Login still succeeds; migration can retry the heal later.
+      }
+    }
+  }
+  return emp;
 }
 
 export async function ensureEmployeeInviteCode(emp: {
@@ -100,7 +157,11 @@ export async function ensureEmployeeInviteCode(emp: {
 }
 
 /** Backfill PREFIX_ID invite codes for all employees with an assigned id. */
-export async function migrateEmployeeInviteCodes(): Promise<{ updated: number; skipped: number }> {
+export async function migrateEmployeeInviteCodes(): Promise<{
+  updated: number;
+  skipped: number;
+  errors: string[];
+}> {
   const companies = await Company.find().select({ id: 1, invitePrefix: 1 }).lean();
   const prefixByCompany = new Map<string, string>();
   for (const c of companies) {
@@ -116,6 +177,7 @@ export async function migrateEmployeeInviteCodes(): Promise<{ updated: number; s
 
   let updated = 0;
   let skipped = 0;
+  const errors: string[] = [];
   for (const emp of employees) {
     if (!emp.companyId) {
       skipped += 1;
@@ -135,9 +197,10 @@ export async function migrateEmployeeInviteCodes(): Promise<{ updated: number; s
       emp.inviteCode = desired;
       await emp.save();
       updated += 1;
-    } catch {
+    } catch (err) {
       skipped += 1;
+      errors.push(`${emp.email || emp.id}: ${(err as Error).message}`);
     }
   }
-  return { updated, skipped };
+  return { updated, skipped, errors };
 }

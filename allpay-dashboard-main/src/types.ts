@@ -130,6 +130,16 @@ export interface Transaction {
   verificationVerdict?: VerificationVerdict;
   claimTicket?: ClaimTicket;
   claimTicketStatus?: ClaimTicketStatus;
+  /** One-shot GPS from mobile at payment confirmation. */
+  latitude?: number | null;
+  longitude?: number | null;
+  locationCapturedAt?: string | null;
+  mobileLocation?: {
+    latitude: number;
+    longitude: number;
+    capturedAt: string;
+  } | null;
+  paymentId?: string;
 }
 
 export interface ExpensePolicy {

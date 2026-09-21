@@ -6,7 +6,6 @@ import {
   Box,
   Button,
   Chip,
-  CircularProgress,
   FormControl,
   IconButton,
   InputAdornment,
@@ -27,7 +26,10 @@ import {
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { adminApi } from "../../api/adminApi";
+import { AdminStatusChip } from "../../components/admin/AdminStatusChip";
+import { AdminCard, AdminTableShell } from "../../components/admin/ui";
 import { adminKeys } from "../../query/adminKeys";
+import { ADMIN } from "../../theme";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
@@ -39,7 +41,14 @@ function initials(name: string) {
 }
 
 function avatarColor(seed: string) {
-  const palette = ["#2563EB", "#059669", "#D97706", "#DC2626", "#0F766E", "#475569"];
+  const palette = [
+    ADMIN.accent.primary,
+    ADMIN.accent.success,
+    ADMIN.accent.warning,
+    ADMIN.accent.error,
+    ADMIN.accent.teal,
+    ADMIN.accent.slate,
+  ];
   let hash = 0;
   for (let i = 0; i < seed.length; i += 1) hash = (hash + seed.charCodeAt(i) * (i + 1)) % 997;
   return palette[hash % palette.length];
@@ -136,30 +145,11 @@ export function AdminEmployeesOnboardingTable({
   const showBlankLoader = employeesQuery.isPending && !employeesQuery.data;
 
   return (
-    <Box
-      sx={{
-        bgcolor: "#fff",
-        border: "1px solid",
-        borderColor: "divider",
-        borderRadius: 0,
-        p: 2,
-      }}
-    >
-      <Stack
-        direction={{ xs: "column", md: "row" }}
-        spacing={1.5}
-        justifyContent="space-between"
-        alignItems={{ md: "flex-end" }}
-        sx={{ mb: 1.5 }}
-      >
-        <Box>
-          <Typography variant="h6" fontWeight={700}>
-            Employee directory
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {showBlankLoader ? "Loading…" : `${total.toLocaleString("en-IN")} match${total === 1 ? "" : "es"}`}
-          </Typography>
-        </Box>
+    <AdminCard
+      variant="flush"
+      title="Employee directory"
+      description={showBlankLoader ? "Loading…" : `${total.toLocaleString("en-IN")} match${total === 1 ? "" : "es"}`}
+      action={
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ width: { xs: "100%", md: "auto" } }}>
           <TextField
             size="small"
@@ -208,8 +198,9 @@ export function AdminEmployeesOnboardingTable({
             </Select>
           </FormControl>
         </Stack>
-      </Stack>
-
+      }
+      contentSx={{ px: 2, pb: 2 }}
+    >
       {listError ? (
         <Alert severity="error" sx={{ mb: 1.5 }}>
           {listError}
@@ -221,167 +212,123 @@ export function AdminEmployeesOnboardingTable({
         </Alert>
       ) : null}
 
-      <Box
-        sx={{
-          border: "1px solid",
-          borderColor: "divider",
-          borderRadius: 0,
-          overflow: "hidden",
-          bgcolor: "#fff",
-          position: "relative",
-          minHeight: 180,
-        }}
-      >
-        {loading && employeesQuery.data ? (
-          <Box
-            sx={{
-              position: "absolute",
-              top: 8,
-              right: 12,
-              zIndex: 2,
-            }}
-          >
-            <CircularProgress size={18} thickness={5} />
-          </Box>
-        ) : null}
-        {showBlankLoader ? (
-          <Stack
-            alignItems="center"
-            justifyContent="center"
-            spacing={1}
-            sx={{ py: 6, position: "absolute", inset: 0, zIndex: 2, bgcolor: "rgba(255,255,255,0.7)" }}
-          >
-            <CircularProgress size={28} />
-            <Typography variant="body2" color="text.secondary" fontWeight={650}>
-              Loading page…
-            </Typography>
-          </Stack>
-        ) : null}
-        <Box sx={{ overflowX: "auto" }}>
-          <Table size="small">
-            <TableHead>
+      <AdminTableShell loading={showBlankLoader} sx={{ minHeight: 180 }}>
+        <Table size="small" sx={{ opacity: loading && employeesQuery.data ? 0.85 : 1 }}>
+          <TableHead>
+            <TableRow>
+              <TableCell>Employee</TableCell>
+              <TableCell>ID</TableCell>
+              <TableCell>Department</TableCell>
+              <TableCell>Mobile invite</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell>Onboarding</TableCell>
+              <TableCell align="right">Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {!showBlankLoader && rows.length === 0 ? (
               <TableRow>
-                <TableCell>Employee</TableCell>
-                <TableCell>ID</TableCell>
-                <TableCell>Department</TableCell>
-                <TableCell>Mobile invite</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Onboarding</TableCell>
-                <TableCell align="right">Actions</TableCell>
+                <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
+                  <Typography color="text.secondary">No employees match these filters</Typography>
+                </TableCell>
               </TableRow>
-            </TableHead>
-            <TableBody>
-              {!showBlankLoader && rows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
-                    <Typography color="text.secondary">No employees match these filters</Typography>
-                  </TableCell>
-                </TableRow>
-              ) : null}
-              {rows.map((emp) => (
-                <TableRow key={emp.email} hover>
-                  <TableCell>
-                    <Stack direction="row" spacing={1.25} alignItems="center">
-                      <Avatar
-                        sx={{
-                          width: 34,
-                          height: 34,
-                          fontSize: 13,
-                          fontWeight: 700,
-                          bgcolor: avatarColor(emp.email || emp.name),
-                        }}
-                      >
-                        {initials(emp.name)}
-                      </Avatar>
-                      <Box sx={{ minWidth: 0 }}>
-                        <Typography variant="body2" fontWeight={700} noWrap>
-                          {emp.name}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" noWrap>
-                          {emp.email}
-                        </Typography>
-                      </Box>
-                    </Stack>
-                  </TableCell>
-                  <TableCell>
-                    <Stack direction="row" alignItems="center" spacing={0.5}>
-                      <Typography variant="body2" fontWeight={650}>
-                        {emp.idAssigned === false ? "—" : emp.id}
+            ) : null}
+            {rows.map((emp) => (
+              <TableRow key={emp.email} hover>
+                <TableCell>
+                  <Stack direction="row" spacing={1.25} alignItems="center">
+                    <Avatar
+                      sx={{
+                        width: 34,
+                        height: 34,
+                        fontSize: 13,
+                        fontWeight: 700,
+                        bgcolor: avatarColor(emp.email || emp.name),
+                      }}
+                    >
+                      {initials(emp.name)}
+                    </Avatar>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="body2" fontWeight={700} noWrap>
+                        {emp.name}
                       </Typography>
-                      {emp.idAssigned !== false ? (
-                        <Tooltip title="Copy ID">
-                          <IconButton size="small" onClick={() => onCopyId(emp.id)}>
-                            <ContentCopy fontSize="inherit" />
-                          </IconButton>
-                        </Tooltip>
-                      ) : null}
-                    </Stack>
-                  </TableCell>
-                  <TableCell>{emp.department || "—"}</TableCell>
-                  <TableCell>
-                    {emp.inviteCode ? (
-                      <Stack direction="row" alignItems="center" spacing={0.5}>
-                        <Chip size="small" label={emp.inviteCode} variant="outlined" sx={{ borderRadius: 1 }} />
-                        <Tooltip title="Copy invite code">
-                          <IconButton size="small" onClick={() => onCopyInviteCode(emp.inviteCode!)}>
-                            <ContentCopy fontSize="inherit" />
-                          </IconButton>
-                        </Tooltip>
-                      </Stack>
-                    ) : (
-                      <Button
-                        size="small"
-                        variant="text"
-                        disabled={isSaving || loading}
-                        onClick={() => void onGenerateInvite(emp.email, emp.name)}
-                        sx={{ textTransform: "none" }}
-                      >
-                        Generate
-                      </Button>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      size="small"
-                      color={emp.active ? "success" : "default"}
-                      label={emp.active ? "Active" : "Deactivated"}
-                      sx={{ borderRadius: 1 }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    {emp.idAssigned === false ? (
-                      <Chip size="small" color="warning" label="Pending ID" sx={{ borderRadius: 1 }} />
-                    ) : (
-                      <Chip
-                        size="small"
-                        color={emp.onboarded ? "primary" : "warning"}
-                        label={emp.onboarded ? "Completed" : "Pending"}
-                        sx={{ borderRadius: 1 }}
-                      />
-                    )}
-                  </TableCell>
-                  <TableCell align="right">
+                      <Typography variant="caption" color="text.secondary" noWrap>
+                        {emp.email}
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </TableCell>
+                <TableCell>
+                  <Stack direction="row" alignItems="center" spacing={0.5}>
+                    <Typography variant="body2" fontWeight={600}>
+                      {emp.idAssigned === false ? "—" : emp.id}
+                    </Typography>
                     {emp.idAssigned !== false ? (
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        disabled={isSaving || loading}
-                        onClick={() => void onResetLogin(emp.email, emp.id)}
-                        sx={{ textTransform: "none" }}
-                      >
-                        Reset login
-                      </Button>
-                    ) : (
-                      <Typography variant="caption" color="text.secondary">
-                        Assign ID first
-                      </Typography>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Box>
+                      <Tooltip title="Copy ID">
+                        <IconButton size="small" onClick={() => onCopyId(emp.id)}>
+                          <ContentCopy fontSize="inherit" />
+                        </IconButton>
+                      </Tooltip>
+                    ) : null}
+                  </Stack>
+                </TableCell>
+                <TableCell>{emp.department || "—"}</TableCell>
+                <TableCell>
+                  {emp.inviteCode ? (
+                    <Stack direction="row" alignItems="center" spacing={0.5}>
+                      <Chip size="small" label={emp.inviteCode} variant="outlined" sx={{ borderRadius: 1 }} />
+                      <Tooltip title="Copy invite code">
+                        <IconButton size="small" onClick={() => onCopyInviteCode(emp.inviteCode!)}>
+                          <ContentCopy fontSize="inherit" />
+                        </IconButton>
+                      </Tooltip>
+                    </Stack>
+                  ) : (
+                    <Button
+                      size="small"
+                      variant="text"
+                      disabled={isSaving || loading}
+                      onClick={() => void onGenerateInvite(emp.email, emp.name)}
+                      sx={{ textTransform: "none" }}
+                    >
+                      Generate
+                    </Button>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <AdminStatusChip status={emp.active ? "active" : "inactive"} label={emp.active ? "Active" : "Deactivated"} />
+                </TableCell>
+                <TableCell>
+                  {emp.idAssigned === false ? (
+                    <AdminStatusChip status="pending" label="Pending ID" />
+                  ) : (
+                    <AdminStatusChip
+                      status={emp.onboarded ? "onboarded" : "invited"}
+                      label={emp.onboarded ? "Completed" : "Pending"}
+                    />
+                  )}
+                </TableCell>
+                <TableCell align="right">
+                  {emp.idAssigned !== false ? (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      disabled={isSaving || loading}
+                      onClick={() => void onResetLogin(emp.email, emp.id)}
+                      sx={{ textTransform: "none" }}
+                    >
+                      Reset login
+                    </Button>
+                  ) : (
+                    <Typography variant="caption" color="text.secondary">
+                      Assign ID first
+                    </Typography>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
 
         <TablePagination
           component="div"
@@ -403,7 +350,7 @@ export function AdminEmployeesOnboardingTable({
             ".MuiTablePagination-toolbar": { flexWrap: "wrap", gap: 0.5 },
           }}
         />
-      </Box>
-    </Box>
+      </AdminTableShell>
+    </AdminCard>
   );
 }
