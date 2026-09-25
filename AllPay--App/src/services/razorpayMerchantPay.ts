@@ -21,6 +21,11 @@ export type MerchantPaymentStatus = {
   payoutFailedReason?: string | null;
   shopPayoutEnabled?: boolean;
   expenseStatus?: string;
+  summary?: {
+    title: string;
+    hop1: string;
+    hop2: string;
+  };
 };
 
 async function parseJson(res: Response): Promise<Record<string, unknown>> {
@@ -96,10 +101,7 @@ export async function confirmMerchantPayment(input: {
   if (!res.ok) {
     throw new Error(String(data.message ?? 'Could not confirm payment'));
   }
-  return {
-    paymentStatus: String(data.paymentStatus ?? 'payment_processing'),
-    razorpayPaymentId: typeof data.razorpayPaymentId === 'string' ? data.razorpayPaymentId : null,
-  };
+  return parseMerchantPaymentStatus(data, 'payment_processing');
 }
 
 export async function fetchMerchantPaymentStatus(txId: string): Promise<MerchantPaymentStatus> {
@@ -111,8 +113,24 @@ export async function fetchMerchantPaymentStatus(txId: string): Promise<Merchant
   if (!res.ok) {
     throw new Error(String(data.message ?? 'Could not load payment status'));
   }
+  return parseMerchantPaymentStatus(data, 'draft');
+}
+
+function parseMerchantPaymentStatus(
+  data: Record<string, unknown>,
+  fallbackStatus: string,
+): MerchantPaymentStatus {
+  const summaryRaw = data.summary;
+  const summary =
+    summaryRaw && typeof summaryRaw === 'object'
+      ? {
+          title: String((summaryRaw as {title?: unknown}).title ?? ''),
+          hop1: String((summaryRaw as {hop1?: unknown}).hop1 ?? ''),
+          hop2: String((summaryRaw as {hop2?: unknown}).hop2 ?? ''),
+        }
+      : undefined;
   return {
-    paymentStatus: String(data.paymentStatus ?? 'draft'),
+    paymentStatus: String(data.paymentStatus ?? fallbackStatus),
     razorpayPaymentId: typeof data.razorpayPaymentId === 'string' ? data.razorpayPaymentId : null,
     razorpayOrderId: typeof data.razorpayOrderId === 'string' ? data.razorpayOrderId : null,
     razorpayPayoutId: typeof data.razorpayPayoutId === 'string' ? data.razorpayPayoutId : null,
@@ -120,7 +138,43 @@ export async function fetchMerchantPaymentStatus(txId: string): Promise<Merchant
     payoutFailedReason: typeof data.payoutFailedReason === 'string' ? data.payoutFailedReason : null,
     shopPayoutEnabled: data.shopPayoutEnabled === true,
     expenseStatus: typeof data.expenseStatus === 'string' ? data.expenseStatus : undefined,
+    summary: summary?.title ? summary : undefined,
   };
+}
+
+export function checkoutErrorMessage(error: unknown): string {
+  if (typeof error === 'string' && error.trim()) {
+    return error;
+  }
+  if (error && typeof error === 'object') {
+    const body = error as {
+      message?: string;
+      description?: string;
+      error?: {description?: string; reason?: string};
+    };
+    const text =
+      body.description ||
+      body.error?.description ||
+      body.error?.reason ||
+      body.message;
+    if (text?.trim()) {
+      return text;
+    }
+  }
+  return 'Payment cancelled';
+}
+
+export function isCollectedPayment(status: string): boolean {
+  return status === 'payout_processed' || status === 'payment_captured';
+}
+
+export function isFailedPayment(status: string): boolean {
+  return (
+    status === 'payout_failed' ||
+    status === 'refunded' ||
+    status === 'payment_failed' ||
+    status === 'refund_initiated'
+  );
 }
 
 export function sleep(ms: number): Promise<void> {

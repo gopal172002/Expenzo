@@ -364,9 +364,15 @@ export async function handleRazorpayWebhookEvent(
   }
 
   if (event.event === "payment.captured" || event.event === "order.paid") {
-    if (tx.paymentStatus !== "payout_processed") {
-      const paymentId = paymentEntity?.id as string | undefined;
-      const capturedAmount = paymentEntity?.amount as number | undefined;
+    const paymentId = paymentEntity?.id as string | undefined;
+    const capturedAmount = paymentEntity?.amount as number | undefined;
+    const alreadySettling =
+      tx.paymentStatus === "payout_processed" ||
+      tx.paymentStatus === "payout_initiated" ||
+      tx.paymentStatus === "refunded" ||
+      tx.paymentStatus === "refund_initiated" ||
+      tx.paymentStatus === "payout_failed";
+    if (!alreadySettling) {
       tx.paymentStatus = assertValidPaymentStatus("payment_captured");
       if (paymentId) {
         tx.razorpayPaymentId = paymentId;
@@ -384,9 +390,25 @@ export async function handleRazorpayWebhookEvent(
       );
       await tx.save();
       await settleMerchantPayout(tx.id);
+    } else if (tx.paymentStatus === "payout_initiated") {
+      if (paymentId && !tx.razorpayPaymentId) {
+        tx.razorpayPaymentId = paymentId;
+      }
+      if (typeof capturedAmount === "number" && tx.capturedAmountPaise == null) {
+        tx.capturedAmountPaise = capturedAmount;
+      }
+      await tx.save();
+      await settleMerchantPayout(tx.id);
     }
   } else if (event.event === "payment.failed") {
-    if (tx.paymentStatus !== "payment_captured" && tx.paymentStatus !== "payout_processed") {
+    if (
+      tx.paymentStatus !== "payment_captured" &&
+      tx.paymentStatus !== "payout_initiated" &&
+      tx.paymentStatus !== "payout_processed" &&
+      tx.paymentStatus !== "payout_failed" &&
+      tx.paymentStatus !== "refunded" &&
+      tx.paymentStatus !== "refund_initiated"
+    ) {
       tx.paymentStatus = assertValidPaymentStatus("payment_failed");
       tx.paymentFailedReason =
         (paymentEntity?.error_description as string | undefined) ?? "Payment failed";
@@ -396,6 +418,67 @@ export async function handleRazorpayWebhookEvent(
   }
 
   return { ok: true };
+}
+
+function paymentItemsFromOrder(payments: unknown): Array<Record<string, unknown>> {
+  if (Array.isArray(payments)) {
+    return payments as Array<Record<string, unknown>>;
+  }
+  if (payments && typeof payments === "object" && Array.isArray((payments as { items?: unknown }).items)) {
+    return (payments as { items: Array<Record<string, unknown>> }).items;
+  }
+  return [];
+}
+
+/**
+ * When checkout is closed after a successful collect (retry / already-paid sheet),
+ * pull paid status from Razorpay so the app does not treat it as cancelled.
+ */
+export async function syncCapturedOrderFromRazorpay(txId: string): Promise<ITransaction | null> {
+  const tx = await Transaction.findOne({ id: txId }).exec();
+  if (!tx?.razorpayOrderId) {
+    return tx;
+  }
+  const status = tx.paymentStatus;
+  if (
+    status === "payment_captured" ||
+    status === "payout_initiated" ||
+    status === "payout_processed" ||
+    status === "refunded" ||
+    status === "refund_initiated"
+  ) {
+    return tx;
+  }
+
+  try {
+    const client = getRazorpayClient();
+    const order = (await client.orders.fetch(tx.razorpayOrderId)) as { status?: string };
+    if (String(order.status) !== "paid") {
+      return tx;
+    }
+    const payments = await client.orders.fetchPayments(tx.razorpayOrderId);
+    const items = paymentItemsFromOrder(payments);
+    const captured = items.find((item) => item.status === "captured");
+    if (!captured) {
+      return tx;
+    }
+    const config = loadRazorpayConfig();
+    tx.paymentStatus = assertValidPaymentStatus("payment_captured");
+    if (captured?.id) {
+      tx.razorpayPaymentId = String(captured.id);
+      tx.upiRefId = tx.upiRefId && tx.upiRefId !== "PENDING" ? tx.upiRefId : String(captured.id);
+    }
+    if (typeof captured?.amount === "number") {
+      tx.capturedAmountPaise = captured.amount;
+    }
+    tx.hasMatchingAllpayRecord = !config.accountNumber;
+    tx.paymentConfirmedAt = tx.paymentConfirmedAt ?? dayjs().toISOString();
+    appendTimeline(tx, "Razorpay order paid · synced after checkout closed");
+    await tx.save();
+    return (await settleMerchantPayout(tx.id)) ?? tx;
+  } catch {
+    return tx;
+  }
 }
 
 export async function markCheckoutOpened(txId: string, companyId?: string): Promise<void> {

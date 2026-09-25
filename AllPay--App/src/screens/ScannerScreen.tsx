@@ -142,7 +142,7 @@ export const ScannerScreen = () => {
         showsVerticalScrollIndicator={false}>
         <ScreenHeader
           title="Scan merchant QR"
-          subtitle="Point the camera at a merchant UPI QR. You pay AllPay via Razorpay; AllPay pays the shop."
+          subtitle="Point the camera at a merchant UPI QR. You pay AllPay via Razorpay. The shop is paid only after RazorpayX payout."
         />
 
         <InfoBanner tone="info" title="Merchant QR only">

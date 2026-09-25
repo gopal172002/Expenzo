@@ -261,11 +261,22 @@ export const PaymentStatusCard = ({
   reference?: string;
 }) => {
   const tone =
-    status === 'SUCCESS_REPORTED' || status === 'USER_CONFIRMED'
+    status === 'SUCCESS_REPORTED' ||
+    status === 'USER_CONFIRMED' ||
+    status === 'payout_processed' ||
+    status === 'payment_captured'
       ? 'success'
-      : status === 'FAILED' || status === 'CANCELLED'
+      : status === 'FAILED' ||
+          status === 'CANCELLED' ||
+          status === 'payment_failed' ||
+          status === 'payout_failed' ||
+          status === 'refunded' ||
+          status === 'payment_abandoned'
         ? 'danger'
-        : status === 'UPI_APP_OPENED' || status === 'INITIATED'
+        : status === 'UPI_APP_OPENED' ||
+            status === 'INITIATED' ||
+            status === 'payout_initiated' ||
+            status === 'payment_processing'
           ? 'info'
           : 'warning';
   const palette = {
@@ -308,7 +319,7 @@ export const PaymentStatusCard = ({
       <Text style={styles.payStatusBody}>{explanation}</Text>
       {reference ? <Text style={styles.payStatusRef}>Reference: {reference}</Text> : null}
       <Text style={styles.payStatusFootnote}>
-        AllPay records reported results. It does not settle bank payments.
+        You pay AllPay via Razorpay. The shop is paid only after a RazorpayX payout.
       </Text>
     </View>
   );

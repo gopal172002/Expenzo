@@ -16,63 +16,37 @@ import {useAppData} from '../context/AppContext';
 import {RootStackParamList} from '../navigation';
 import {colors, spacing} from '../theme/tokens';
 import {maskRef} from '../upi/mask';
-import {fetchMerchantPaymentStatus} from '../services/razorpayMerchantPay';
+import {
+  fetchMerchantPaymentStatus,
+  isCollectedPayment,
+  sleep,
+} from '../services/razorpayMerchantPay';
+import {explainPaymentStatus} from '../services/paymentStatusCopy';
+import {toast} from '../utils/toast';
+import type {Transaction} from '../types';
 
 type Route = RouteProp<RootStackParamList, 'PaymentResult'>;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-const RESULT_COPY: Record<string, {title: string; body: string}> = {
-  payout_processed: {
-    title: 'Shop paid',
-    body: 'Razorpay confirmed your payment to AllPay, and AllPay paid this merchant. Finance can now review the expense.',
-  },
-  payment_captured: {
-    title: 'Payment received',
-    body: 'Razorpay confirmed your payment to AllPay. Shop payout is skipped until RazorpayX is available.',
-  },
-  payout_initiated: {
-    title: 'Paying the shop',
-    body: 'AllPay has started the UPI payout to this merchant. This usually completes in a few seconds.',
-  },
-  payment_processing: {
-    title: 'Confirming payment',
-    body: 'Razorpay is confirming your checkout. AllPay will pay the shop as soon as it is captured.',
-  },
-  order_created: {
-    title: 'Order created',
-    body: 'Checkout did not finish. No money was taken from you and the shop was not paid.',
-  },
-  checkout_opened: {
-    title: 'Checkout opened',
-    body: 'Razorpay was opened but the payment did not complete.',
-  },
-  payment_abandoned: {
-    title: 'Payment cancelled',
-    body: 'You closed Razorpay before paying. No expense was added.',
-  },
-  payment_failed: {
-    title: 'Payment failed',
-    body: 'Razorpay could not collect the payment. The shop was not paid.',
-  },
-  payout_failed: {
-    title: 'Shop payout failed',
-    body: 'AllPay received your money but could not pay the shop. A refund should follow.',
-  },
-  refund_initiated: {
-    title: 'Refund started',
-    body: 'The shop payout failed. AllPay is refunding your Razorpay payment.',
-  },
-  refunded: {
-    title: 'Refunded',
-    body: 'The shop was not paid. Your payment to AllPay has been refunded.',
-  },
-};
+function isFinishedStatus(status: string, shopPayoutEnabled: boolean): boolean {
+  if (
+    status === 'payout_processed' ||
+    status === 'refunded' ||
+    status === 'payment_failed' ||
+    status === 'payout_failed'
+  ) {
+    return true;
+  }
+  return status === 'payment_captured' && !shopPayoutEnabled;
+}
 
 export const PaymentResultScreen = () => {
   const navigation = useNavigation<Nav>();
   const {paymentId} = useRoute<Route>().params;
   const {transactions, patchTransaction, isOnline} = useAppData();
   const [polling, setPolling] = useState(false);
+  const [shopPayoutEnabled, setShopPayoutEnabled] = useState(false);
+  const [checkingRetry, setCheckingRetry] = useState(false);
 
   const expense = useMemo(
     () => transactions.find(item => item.id === paymentId || item.paymentId === paymentId),
@@ -80,43 +54,41 @@ export const PaymentResultScreen = () => {
   );
 
   useEffect(() => {
-    if (!expense) {
-      return;
-    }
-    const status = expense.paymentStatus;
-    if (
-      status === 'payout_processed' ||
-      status === 'payment_captured' ||
-      status === 'refunded' ||
-      status === 'payment_failed' ||
-      status === 'payment_abandoned'
-    ) {
-      return;
-    }
     let cancelled = false;
-    setPolling(true);
-    void fetchMerchantPaymentStatus(paymentId)
-      .then(async latest => {
-        if (cancelled) {
-          return;
+    const started = Date.now();
+    const tick = async () => {
+      setPolling(true);
+      while (!cancelled && Date.now() - started < 20000) {
+        try {
+          const latest = await fetchMerchantPaymentStatus(paymentId);
+          if (cancelled) {
+            return;
+          }
+          const payoutOn = latest.shopPayoutEnabled === true;
+          setShopPayoutEnabled(payoutOn);
+          await patchTransaction(paymentId, {
+            paymentStatus: latest.paymentStatus as Transaction['paymentStatus'],
+            razorpayPaymentId: latest.razorpayPaymentId ?? undefined,
+            upiRefId: latest.payoutUtr ?? latest.razorpayPaymentId ?? undefined,
+            paymentFailedReason: latest.payoutFailedReason ?? undefined,
+          });
+          if (isFinishedStatus(latest.paymentStatus, payoutOn)) {
+            break;
+          }
+        } catch {
+          break;
         }
-        await patchTransaction(paymentId, {
-          paymentStatus: latest.paymentStatus as NonNullable<typeof expense.paymentStatus>,
-          razorpayPaymentId: latest.razorpayPaymentId ?? expense.razorpayPaymentId,
-          upiRefId: latest.payoutUtr ?? expense.upiRefId,
-          paymentFailedReason: latest.payoutFailedReason ?? expense.paymentFailedReason,
-        });
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (!cancelled) {
-          setPolling(false);
-        }
-      });
+        await sleep(2000);
+      }
+      if (!cancelled) {
+        setPolling(false);
+      }
+    };
+    void tick();
     return () => {
       cancelled = true;
     };
-  }, [expense, paymentId, patchTransaction]);
+  }, [paymentId, patchTransaction]);
 
   if (!expense) {
     return (
@@ -135,17 +107,40 @@ export const PaymentResultScreen = () => {
   }
 
   const status = expense.paymentStatus ?? 'order_created';
-  const copy = RESULT_COPY[status] ?? {
-    title: 'Payment update',
-    body: 'AllPay is updating this merchant payment.',
-  };
+  const copy = explainPaymentStatus(status, shopPayoutEnabled);
   const amountLabel = `₹${Number(expense.amount).toLocaleString('en-IN')}`;
-  const success = status === 'payout_processed' || status === 'payment_captured';
+  const collected = isCollectedPayment(status);
   const failed =
     status === 'payment_failed' ||
     status === 'payout_failed' ||
     status === 'refunded' ||
     status === 'payment_abandoned';
+
+  const onRetry = async () => {
+    setCheckingRetry(true);
+    try {
+      const latest = await fetchMerchantPaymentStatus(expense.id);
+      setShopPayoutEnabled(latest.shopPayoutEnabled === true);
+      await patchTransaction(expense.id, {
+        paymentStatus: latest.paymentStatus as Transaction['paymentStatus'],
+        razorpayPaymentId: latest.razorpayPaymentId ?? undefined,
+        upiRefId: latest.payoutUtr ?? latest.razorpayPaymentId ?? undefined,
+        paymentFailedReason: latest.payoutFailedReason ?? undefined,
+      });
+      if (isCollectedPayment(latest.paymentStatus)) {
+        toast.info(
+          latest.paymentStatus === 'payout_processed' ? 'Already paid' : 'Already captured',
+          'This order is already paid. A new Pay would charge you again.',
+        );
+        return;
+      }
+    } catch {
+      /* start a new collect only if we cannot confirm a prior capture */
+    } finally {
+      setCheckingRetry(false);
+    }
+    navigation.replace('Payment', {merchant: expense.merchant});
+  };
 
   return (
     <Screen safeTop={false}>
@@ -155,17 +150,16 @@ export const PaymentResultScreen = () => {
           amount={amountLabel}
           payee={expense.merchant.name}
           status={status}
-          explanation={copy.body}
-          reference={success ? maskRef(expense.upiRefId) : undefined}
+          explanation={`${copy.hop1} ${copy.hop2}`}
+          reference={collected ? maskRef(expense.upiRefId || expense.razorpayPaymentId) : undefined}
         />
 
         <Section title="What happened">
           <Text style={styles.body}>
-            <Text style={styles.strong}>You → AllPay</Text> via Razorpay checkout.
+            <Text style={styles.strong}>You → AllPay</Text> {copy.hop1}
           </Text>
           <Text style={[styles.body, styles.bodySpaced]}>
-            <Text style={styles.strong}>AllPay → shop</Text> {expense.merchant.vpa} via instant UPI
-            payout.
+            <Text style={styles.strong}>AllPay → shop {expense.merchant.vpa}</Text> {copy.hop2}
           </Text>
           {expense.paymentFailedReason ? (
             <Text style={[styles.body, styles.bodySpaced]}>{expense.paymentFailedReason}</Text>
@@ -173,8 +167,8 @@ export const PaymentResultScreen = () => {
         </Section>
 
         {polling ? (
-          <InfoBanner tone="warning" title="Checking shop payout">
-            Refreshing status from AllPay.
+          <InfoBanner tone="warning" title="Checking Razorpay">
+            Confirming whether this order was captured and whether the shop was paid.
           </InfoBanner>
         ) : null}
 
@@ -184,7 +178,7 @@ export const PaymentResultScreen = () => {
           </InfoBanner>
         ) : null}
 
-        {success ? (
+        {collected ? (
           <>
             <PrimaryButton
               label="View expense"
@@ -197,10 +191,14 @@ export const PaymentResultScreen = () => {
           </>
         ) : null}
 
-        {failed ? (
+        {failed && !collected ? (
           <PrimaryButton
-            label="Retry payment"
-            onPress={() => navigation.replace('Payment', {merchant: expense.merchant})}
+            label={checkingRetry ? 'Checking…' : 'Pay again'}
+            onPress={() => {
+              void onRetry();
+            }}
+            disabled={checkingRetry}
+            loading={checkingRetry}
           />
         ) : null}
 

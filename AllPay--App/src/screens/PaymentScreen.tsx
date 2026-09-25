@@ -24,8 +24,12 @@ import {isPersonalP2pPayment} from '../upi/scanner/UpiQrParser';
 import {createUuid} from '../upi/id';
 import {capturePaymentLocationSnapshot} from '../services/locationSnapshot';
 import {
+  checkoutErrorMessage,
   confirmMerchantPayment,
   createMerchantOrder,
+  fetchMerchantPaymentStatus,
+  isCollectedPayment,
+  isFailedPayment,
   markMerchantCheckoutOpened,
   waitForShopPayout,
 } from '../services/razorpayMerchantPay';
@@ -60,6 +64,57 @@ export const PaymentScreen = () => {
     baseSanitizedUri: merchant.sanitizedUri,
   });
 
+  const applySettledPayment = async (
+    txId: string,
+    settled: Awaited<ReturnType<typeof waitForShopPayout>>,
+    fallbackPaymentId?: string,
+  ) => {
+    const collected = isCollectedPayment(settled.paymentStatus);
+    await patchTransaction(txId, {
+      paymentStatus: settled.paymentStatus as Transaction['paymentStatus'],
+      razorpayPaymentId: settled.razorpayPaymentId ?? fallbackPaymentId,
+      upiRefId: settled.payoutUtr ?? settled.razorpayPaymentId ?? fallbackPaymentId,
+      paymentFailedReason: settled.payoutFailedReason ?? undefined,
+      paymentConfirmedAt: new Date().toISOString(),
+      syncStatus: collected ? 'synced' : 'queued',
+    });
+
+    if (settled.paymentStatus === 'payout_processed') {
+      toast.info('Shop paid', 'You paid AllPay. AllPay paid this shop.');
+    } else if (settled.paymentStatus === 'payment_captured') {
+      toast.info(
+        'AllPay received payment',
+        settled.shopPayoutEnabled
+          ? 'Razorpay captured your payment. Shop payout is still in progress.'
+          : 'Razorpay captured your payment. The shop was not paid — RazorpayX is not connected.',
+      );
+    } else if (settled.paymentStatus === 'refunded') {
+      toast.error('Refunded', 'The shop was not paid. Your payment to AllPay was refunded.');
+    } else if (settled.paymentStatus === 'payout_failed') {
+      toast.error('Shop payout failed', settled.payoutFailedReason || 'AllPay could not pay the shop.');
+    } else if (settled.payoutFailedReason) {
+      toast.error('Shop payout failed', settled.payoutFailedReason);
+    }
+  };
+
+  const recoverClosedCheckout = async (txId: string, shopPayoutEnabled: boolean) => {
+    try {
+      const latest = await fetchMerchantPaymentStatus(txId);
+      if (isCollectedPayment(latest.paymentStatus) || isFailedPayment(latest.paymentStatus)) {
+        await applySettledPayment(txId, latest);
+        return true;
+      }
+      const settled = await waitForShopPayout(txId, 20000, shopPayoutEnabled);
+      if (isCollectedPayment(settled.paymentStatus) || isFailedPayment(settled.paymentStatus)) {
+        await applySettledPayment(txId, settled);
+        return true;
+      }
+    } catch {
+      return false;
+    }
+    return false;
+  };
+
   const continuePayment = async (parsedPaise: number) => {
     if (paying || !profile) {
       return;
@@ -75,6 +130,7 @@ export const PaymentScreen = () => {
     setPaying(true);
     const txId = createUuid();
     const amountRupees = Number(paiseToRupeeLabel(parsedPaise));
+    let shopPayoutEnabled = false;
     try {
       setStatusMessage('Creating payment to AllPay...');
       const order = await createMerchantOrder({
@@ -89,6 +145,7 @@ export const PaymentScreen = () => {
           ...(merchant.amount != null ? {amount: merchant.amount} : {}),
         },
       });
+      shopPayoutEnabled = order.shopPayoutEnabled;
 
       const draft: Transaction = {
         id: txId,
@@ -127,53 +184,53 @@ export const PaymentScreen = () => {
       });
 
       const snapshot = await capturePaymentLocationSnapshot(locationEnabled);
-      setStatusMessage('Confirming payment...');
-      await confirmMerchantPayment({
+      setStatusMessage('Confirming payment to AllPay...');
+      const confirmed = await confirmMerchantPayment({
         txId,
         razorpay_order_id: checkout.razorpay_order_id,
         razorpay_payment_id: checkout.razorpay_payment_id,
         razorpay_signature: checkout.razorpay_signature,
         location: snapshot.location,
       });
+      shopPayoutEnabled = confirmed.shopPayoutEnabled === true || shopPayoutEnabled;
       await patchTransaction(txId, {
-        paymentStatus: 'payment_processing',
-        razorpayPaymentId: checkout.razorpay_payment_id,
+        paymentStatus: (isCollectedPayment(confirmed.paymentStatus)
+          ? confirmed.paymentStatus
+          : 'payment_processing') as Transaction['paymentStatus'],
+        razorpayPaymentId: confirmed.razorpayPaymentId ?? checkout.razorpay_payment_id,
         location: snapshot.location,
       });
 
-      setStatusMessage(
-        order.shopPayoutEnabled
-          ? 'Paying the shop from AllPay...'
-          : 'Confirming payment with AllPay...',
-      );
-      const settled = await waitForShopPayout(txId, 45000, order.shopPayoutEnabled);
-      const collected =
-        settled.paymentStatus === 'payout_processed' ||
-        settled.paymentStatus === 'payment_captured';
-      await patchTransaction(txId, {
-        paymentStatus: settled.paymentStatus as Transaction['paymentStatus'],
-        razorpayPaymentId: settled.razorpayPaymentId ?? checkout.razorpay_payment_id,
-        upiRefId: settled.payoutUtr ?? checkout.razorpay_payment_id,
-        paymentFailedReason: settled.payoutFailedReason ?? undefined,
-        paymentConfirmedAt: new Date().toISOString(),
-        syncStatus: collected ? 'synced' : 'queued',
-      });
-
-      if (settled.paymentStatus === 'payout_processed') {
-        toast.info('Shop paid', 'AllPay received your payment and paid the merchant.');
-      } else if (settled.paymentStatus === 'payment_captured') {
-        toast.info('Payment received', 'AllPay recorded your Razorpay payment.');
-      } else if (settled.paymentStatus === 'refunded') {
-        toast.error('Shop payout failed', 'Your payment to AllPay was refunded.');
-      } else if (settled.payoutFailedReason) {
-        toast.error('Shop payout pending', settled.payoutFailedReason);
+      if (isCollectedPayment(confirmed.paymentStatus) && !shopPayoutEnabled) {
+        await applySettledPayment(txId, confirmed, checkout.razorpay_payment_id);
+        navigation.replace('PaymentResult', {paymentId: txId});
+        return;
       }
 
+      setStatusMessage(
+        shopPayoutEnabled
+          ? 'AllPay received your payment. Paying the shop...'
+          : 'Confirming capture with AllPay...',
+      );
+      const settled = await waitForShopPayout(txId, 45000, shopPayoutEnabled);
+      await applySettledPayment(txId, settled, checkout.razorpay_payment_id);
       navigation.replace('PaymentResult', {paymentId: txId});
     } catch (error) {
-      const message = (error as Error).message || 'Payment cancelled';
-      if (/cancelled|backpressed|user/i.test(message)) {
-        toast.info('Payment cancelled', 'No money was taken.');
+      const message = checkoutErrorMessage(error);
+      setStatusMessage('Checking if Razorpay already collected this payment...');
+      const recovered = await recoverClosedCheckout(txId, shopPayoutEnabled);
+      if (recovered) {
+        navigation.replace('PaymentResult', {paymentId: txId});
+        return;
+      }
+      if (/already paid|order is already paid/i.test(message)) {
+        toast.info('Checking payment', 'That Razorpay order was already paid. Confirming with AllPay.');
+        await patchTransaction(txId, {paymentStatus: 'payment_processing'});
+      } else if (/cancelled|backpressed|dismiss/i.test(message) || /user closed|user cancelled/i.test(message)) {
+        toast.info(
+          'Checkout closed',
+          'If Razorpay already captured this order, AllPay will mark it paid. Otherwise no money was taken.',
+        );
         await patchTransaction(txId, {paymentStatus: 'payment_abandoned'});
       } else {
         toast.error('Payment failed', message);
@@ -250,12 +307,13 @@ export const PaymentScreen = () => {
         <ScreenHeader
           eyebrow={profile?.companyName}
           title="Confirm merchant payment"
-          subtitle="You pay AllPay through Razorpay. AllPay then pays this shop instantly."
+          subtitle="You pay AllPay through Razorpay. The shop is paid only if RazorpayX is connected."
         />
 
         <InfoBanner tone="info" title="Merchant payment">
-          You pay AllPay through Razorpay. When RazorpayX is connected, AllPay instantly pays this
-          shop’s UPI ID. Until then, AllPay records the captured payment.
+          Step 1: you pay AllPay in Razorpay (UPI PIN happens inside Razorpay / your UPI app).
+          Step 2: AllPay pays this shop only when RAZORPAYX_ACCOUNT_NUMBER is set on the server.
+          Until then the payment stays with AllPay as captured.
         </InfoBanner>
 
         {personalP2p ? (
@@ -308,7 +366,8 @@ export const PaymentScreen = () => {
 
         <Section title="Before you pay">
           <DetailRow label="You pay" value="AllPay (Razorpay checkout)" />
-          <DetailRow label="Shop receives" value={merchant.vpa} />
+          <DetailRow label="Shop receives" value="Only after RazorpayX payout to this VPA" />
+          <DetailRow label="Shop UPI" value={merchant.vpa} />
           <DetailRow
             label="Location snapshot"
             value={

@@ -34,7 +34,7 @@ import { VerificationPanel, VerificationScoreChip } from "../../components/verif
 import { useAdminData } from "../../context/AdminDataContext";
 import { ADMIN } from "../../theme";
 import type { ClaimTicket, VerificationResult } from "../../types";
-import { inr, statusLabel } from "../../utils/labels";
+import { inr, paymentStatusLabel, statusLabel } from "../../utils/labels";
 
 function isSafeInternalPath(value: unknown): value is string {
   return typeof value === "string" && value.startsWith("/") && !value.startsWith("//");
@@ -452,9 +452,14 @@ export const AdminTransactionDetailPage = () => {
               { label: "Merchant", value: transaction.merchantName },
               { label: "Merchant UPI", value: transaction.merchantVpa || "—" },
               { label: "MCC", value: transaction.mcc || "—" },
-              { label: "Pay rail", value: transaction.paymentMethod || transaction.upiApp },
-              { label: "Payment status", value: transaction.paymentStatus || "—" },
-              { label: "UPI / payout ref", value: transaction.payoutUtr || transaction.upiRefId, mono: true },
+              { label: "Pay rail", value: transaction.paymentMethod || transaction.upiApp || "—" },
+              { label: "Payment status", value: paymentStatusLabel(transaction.paymentStatus) },
+              { label: "Employee → AllPay", value: transaction.razorpayPaymentId || "Not captured", mono: true },
+              { label: "Razorpay order", value: transaction.razorpayOrderId || "—", mono: true },
+              { label: "AllPay → shop payout", value: transaction.razorpayPayoutId || "Not paid to shop", mono: true },
+              { label: "Shop UTR", value: transaction.payoutUtr || "—", mono: true },
+              { label: "Refund", value: transaction.refundId || "—", mono: true },
+              { label: "Payout note", value: transaction.payoutFailedReason || "—" },
               { label: "Captured amount", value: inr(transaction.amount) },
               { label: "Claimed amount", value: inr(transaction.claimedAmount) },
               { label: "Transaction time", value: dayjs(transaction.dateTime).format("DD MMM YYYY, HH:mm") },

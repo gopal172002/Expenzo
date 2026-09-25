@@ -182,8 +182,8 @@ export const SettingsScreen = () => {
 
           <Text style={styles.prefSectionLabel}>Default UPI app</Text>
           <Text style={styles.prefHint}>
-            AllPay opens this app to complete the bank payment. AllPay does not settle payments
-            itself.
+            Used only if a UPI app opens from Razorpay checkout. You still pay AllPay, not the shop
+            directly.
           </Text>
           {installedUpiApps.length === 0 ? (
             <Text style={styles.prefHint}>

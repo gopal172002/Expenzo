@@ -265,8 +265,12 @@ export const paymentStatusLabel = (status: string): string => {
       return 'Confirming';
     case 'order_created':
       return 'Order created';
+    case 'checkout_opened':
+      return 'Checkout opened';
+    case 'draft':
+      return 'Draft';
     case 'payment_abandoned':
-      return 'Cancelled';
+      return 'Checkout closed';
     case 'payment_failed':
       return 'Payment failed';
     default:
@@ -281,6 +285,7 @@ export const statusTone = (
     status === 'Approved' ||
     status === 'SUCCESS_REPORTED' ||
     status === 'payout_processed' ||
+    status === 'payment_captured' ||
     status === 'synced' ||
     status === 'Recorded'
   ) {
@@ -308,7 +313,7 @@ export const statusTone = (
     status === 'UPI_APP_OPENED' ||
     status === 'payout_initiated' ||
     status === 'payment_processing' ||
-    status === 'payment_captured' ||
+    status === 'checkout_opened' ||
     status === 'queued'
   ) {
     return {bg: colors.warningSoft, fg: colors.warningText, border: colors.warningBorder};

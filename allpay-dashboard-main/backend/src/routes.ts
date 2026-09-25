@@ -69,9 +69,11 @@ import {
 import {
   confirmRazorpayPayment,
   createRazorpayOrder,
-  markCheckoutOpened
+  markCheckoutOpened,
+  syncCapturedOrderFromRazorpay
 } from "./services/razorpayService";
 import { isShopPayoutEnabled, type PaymentStatus } from "./services/razorpayConfig";
+import { explainPaymentStatus } from "./services/paymentStatusExplain";
 import {
   employeeIdIsAssigned,
   findActiveEmployeeByEmail,
@@ -880,6 +882,15 @@ router.post("/mobile/payments/confirm", mobileDeviceAuth, async (req: MobileRequ
     }
 
     const location = parsePaymentLocation(body);
+    const existingQuery: Record<string, unknown> = { id: body.txId };
+    if (req.mobileCompanyId) existingQuery.companyId = req.mobileCompanyId;
+    const existing = await Transaction.findOne(existingQuery).exec();
+    if (!existing) {
+      return res.status(404).json({ ok: false, message: "Transaction not found" });
+    }
+    if (req.mobileEmployeeId && req.mobileEmployeeId !== existing.employeeId) {
+      return res.status(403).json({ ok: false, message: "Not allowed" });
+    }
 
     const tx = await confirmRazorpayPayment({
       txId: body.txId,
@@ -888,18 +899,18 @@ router.post("/mobile/payments/confirm", mobileDeviceAuth, async (req: MobileRequ
       razorpay_signature: body.razorpay_signature,
       location,
     });
-
-    if (req.mobileEmployeeId && req.mobileEmployeeId !== tx.employeeId) {
-      return res.status(403).json({ ok: false, message: "Not allowed" });
-    }
+    const shopPayoutEnabled = isShopPayoutEnabled();
 
     res.json({
       ok: true,
       paymentStatus: tx.paymentStatus,
       razorpayPaymentId: tx.razorpayPaymentId,
+      razorpayOrderId: tx.razorpayOrderId ?? null,
       razorpayPayoutId: tx.razorpayPayoutId ?? null,
       payoutUtr: tx.payoutUtr ?? null,
-      shopPayoutEnabled: isShopPayoutEnabled(),
+      payoutFailedReason: tx.payoutFailedReason ?? null,
+      shopPayoutEnabled,
+      summary: explainPaymentStatus(tx.paymentStatus, shopPayoutEnabled),
       latitude: tx.latitude ?? null,
       longitude: tx.longitude ?? null,
       locationCapturedAt: tx.locationCapturedAt ?? null,
@@ -948,8 +959,10 @@ router.get("/mobile/transactions/:id/payment-status", mobileDeviceAuth, async (r
     if (req.mobileEmployeeId && req.mobileEmployeeId !== tx.employeeId) {
       return res.status(403).json({ ok: false, message: "Not allowed" });
     }
+    await syncCapturedOrderFromRazorpay(tx.id);
     await settleMerchantPayout(tx.id);
     const latest = (await Transaction.findOne(txQuery).exec()) ?? tx;
+    const shopPayoutEnabled = isShopPayoutEnabled();
     res.json({
       ok: true,
       paymentStatus: latest.paymentStatus ?? "draft",
@@ -958,7 +971,8 @@ router.get("/mobile/transactions/:id/payment-status", mobileDeviceAuth, async (r
       razorpayPayoutId: latest.razorpayPayoutId ?? null,
       payoutUtr: latest.payoutUtr ?? null,
       payoutFailedReason: latest.payoutFailedReason ?? null,
-      shopPayoutEnabled: isShopPayoutEnabled(),
+      shopPayoutEnabled,
+      summary: explainPaymentStatus(latest.paymentStatus, shopPayoutEnabled),
       expenseStatus: latest.status
     });
   } catch (error) {

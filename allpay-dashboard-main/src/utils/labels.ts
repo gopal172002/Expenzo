@@ -19,6 +19,35 @@ export function statusLabel(status: string): string {
   return STATUS_LABELS[status as TransactionStatus] ?? status;
 }
 
+export function paymentStatusLabel(status?: string): string {
+  switch (status) {
+    case "payout_processed":
+      return "Shop paid";
+    case "payout_initiated":
+      return "Paying shop";
+    case "payout_failed":
+      return "Shop payout failed";
+    case "payment_captured":
+      return "Received by AllPay";
+    case "payment_processing":
+      return "Confirming capture";
+    case "order_created":
+      return "Order created — not paid";
+    case "checkout_opened":
+      return "Checkout opened — not confirmed";
+    case "payment_failed":
+      return "Employee payment failed";
+    case "payment_abandoned":
+      return "Checkout closed";
+    case "refund_initiated":
+      return "Refund started";
+    case "refunded":
+      return "Refunded to employee";
+    default:
+      return status || "—";
+  }
+}
+
 export function inr(value: number): string {
   return `₹${value.toLocaleString("en-IN")}`;
 }

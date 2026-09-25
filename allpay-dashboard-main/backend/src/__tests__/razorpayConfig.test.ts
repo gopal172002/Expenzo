@@ -4,6 +4,7 @@ import {
   isValidPaymentStatus,
   loadRazorpayConfig,
 } from "../services/razorpayConfig";
+import { explainPaymentStatus } from "../services/paymentStatusExplain";
 
 describe("razorpayConfig", () => {
   const originalEnv = process.env;
@@ -41,6 +42,14 @@ describe("razorpayConfig", () => {
     process.env.NODE_ENV = "production";
     process.env.USE_RAZORPAY_UPI = "true";
     expect(() => loadRazorpayConfig()).toThrow(/must be set in production/);
+  });
+
+  it("explains captured vs shop-paid explicitly", () => {
+    const skipped = explainPaymentStatus("payment_captured", false);
+    expect(skipped.hop2).toMatch(/RAZORPAYX_ACCOUNT_NUMBER is empty/i);
+    const shopPaid = explainPaymentStatus("payout_processed", true);
+    expect(shopPaid.title).toBe("Shop paid");
+    expect(shopPaid.hop2).toMatch(/paid the shop/i);
   });
 });
 

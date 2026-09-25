@@ -60,7 +60,8 @@ function normalizeUpiAppLabel(name: string): string {
   if (n.includes("phonepe")) return "PhonePe";
   if (n.includes("paytm")) return "Paytm";
   if (n.includes("bhim")) return "BHIM";
-  return "GPay";
+  if (n.includes("razorpay")) return "Razorpay";
+  return name?.trim() || "Razorpay";
 }
 
 export function mapMobileStatusToDashboard(status: string): string {

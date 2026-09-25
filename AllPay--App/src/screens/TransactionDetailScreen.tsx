@@ -164,7 +164,7 @@ export const TransactionDetailScreen = () => {
         </View>
 
         <InfoBanner tone="info" title="Payment vs reimbursement">
-          Payment status is what your UPI app reported. Reimbursement status is decided by finance.
+          Payment status is Razorpay collect + optional shop payout. Reimbursement is decided by finance.
           A successful payment record is not an approved claim.
         </InfoBanner>
 

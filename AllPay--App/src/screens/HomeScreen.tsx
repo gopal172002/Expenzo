@@ -187,14 +187,14 @@ export const HomeScreen = () => {
 
               <SectionHeader
                 title="Scan & pay"
-                description="AllPay opens your installed UPI app — it does not settle the bank payment."
+                description="Scan a merchant QR. You pay AllPay in Razorpay. The shop is paid only if RazorpayX is connected."
               />
               <View style={styles.grid}>
                 <ActionTile
                   primary
                   mark="QR"
                   title="Scan & Pay"
-                  subtitle="Merchant QR → open UPI"
+                  subtitle="Merchant QR → pay AllPay"
                   onPress={() => navigation.navigate('Scan')}
                 />
                 <ActionTile

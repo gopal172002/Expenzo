@@ -1,10 +1,26 @@
+type MockOrderState = { status: string; payment?: { id: string; amount: number; status: string } };
+const razorpayOrderStore = ((globalThis as { __rzpOrders?: Map<string, MockOrderState> }).__rzpOrders ??=
+  new Map<string, MockOrderState>());
+
 jest.mock("razorpay", () => {
   let orderCounter = 0;
+  const store = ((globalThis as { __rzpOrders?: Map<string, unknown> }).__rzpOrders ??=
+    new Map());
   return jest.fn().mockImplementation(() => ({
     orders: {
       create: jest.fn().mockImplementation(async () => {
         orderCounter += 1;
-        return { id: `order_mock_${orderCounter}` };
+        const id = `order_mock_${orderCounter}`;
+        store.set(id, { status: "created" });
+        return { id };
+      }),
+      fetch: jest.fn().mockImplementation(async (orderId: string) => {
+        const stored = store.get(orderId);
+        return { id: orderId, status: stored?.status ?? "created" };
+      }),
+      fetchPayments: jest.fn().mockImplementation(async (orderId: string) => {
+        const stored = store.get(orderId);
+        return { items: stored?.payment ? [stored.payment] : [] };
       }),
     },
   }));
@@ -22,6 +38,7 @@ import {
   createRazorpayOrder,
   handleRazorpayWebhookEvent,
   resetRazorpayClientForTests,
+  syncCapturedOrderFromRazorpay,
   verifyPaymentSignature,
 } from "../services/razorpayService";
 import { setPayoutApiForTests, settleMerchantPayout } from "../services/razorpayPayoutService";
@@ -338,6 +355,69 @@ describe("Razorpay integration", () => {
       }),
       refundPayment: async () => ({ id: "rfnd_mock" }),
     });
+  });
+
+  it("late payment.captured webhook does not reset payout_initiated", async () => {
+    const order = await createRazorpayOrder({
+      txId: "TXN-WH-NORESET",
+      amount: 20,
+      employeeId: "EMP-1000",
+      employeeName: "Employee 1",
+      department: "Engineering",
+      merchant: { vpa: "h@paytm", name: "H", category: "office", mcc: "5999" },
+    });
+    const paymentId = "pay_confirm_noreset";
+    const signature = crypto
+      .createHmac("sha256", keySecret)
+      .update(`${order.orderId}|${paymentId}`)
+      .digest("hex");
+    const confirmed = await confirmRazorpayPayment({
+      txId: "TXN-WH-NORESET",
+      razorpay_order_id: order.orderId,
+      razorpay_payment_id: paymentId,
+      razorpay_signature: signature,
+    });
+    expect(["payout_initiated", "payout_processed"]).toContain(confirmed.paymentStatus);
+
+    const payload = JSON.stringify({
+      event: "payment.captured",
+      id: "evt_late_capture",
+      payload: {
+        payment: {
+          entity: {
+            id: paymentId,
+            order_id: order.orderId,
+            amount: 2000,
+          },
+        },
+      },
+    });
+    const webhookSignature = crypto.createHmac("sha256", webhookSecret).update(payload).digest("hex");
+    await handleRazorpayWebhookEvent(payload, webhookSignature, "evt_late_capture");
+    const tx = await Transaction.findOne({ id: "TXN-WH-NORESET" }).exec();
+    expect(tx?.paymentStatus).not.toBe("payment_captured");
+    expect(["payout_initiated", "payout_processed"]).toContain(tx?.paymentStatus);
+  });
+
+  it("syncs a paid Razorpay order after checkout is closed", async () => {
+    process.env.RAZORPAYX_ACCOUNT_NUMBER = "";
+    const order = await createRazorpayOrder({
+      txId: "TXN-SYNC-PAID",
+      amount: 1,
+      employeeId: "EMP-1000",
+      employeeName: "Employee 1",
+      department: "Engineering",
+      merchant: { vpa: "g@paytm", name: "G", category: "office", mcc: "5999" },
+    });
+    razorpayOrderStore.set(order.orderId, {
+      status: "paid",
+      payment: { id: "pay_synced_1", amount: 100, status: "captured" },
+    });
+
+    const tx = await syncCapturedOrderFromRazorpay("TXN-SYNC-PAID");
+    expect(tx?.paymentStatus).toBe("payment_captured");
+    expect(tx?.razorpayPaymentId).toBe("pay_synced_1");
+    process.env.RAZORPAYX_ACCOUNT_NUMBER = "2323230003046";
   });
 
   it("rejects invalid webhook signature", async () => {

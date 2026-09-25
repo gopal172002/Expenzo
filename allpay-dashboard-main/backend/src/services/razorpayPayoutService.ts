@@ -305,6 +305,9 @@ export function applyPayoutWebhookToTransaction(
   }
 
   if (event === "payout.processed" || payout.status === "processed") {
+    if (tx.paymentStatus === "refunded" || tx.paymentStatus === "refund_initiated") {
+      return false;
+    }
     markPayoutProcessed(tx, payoutId || tx.id, payout.utr);
     return true;
   }
@@ -318,6 +321,9 @@ export function applyPayoutWebhookToTransaction(
     payout.status === "failed" ||
     payout.status === "cancelled"
   ) {
+    if (tx.paymentStatus === "payout_processed" || tx.paymentStatus === "refunded") {
+      return false;
+    }
     tx.paymentStatus = assertValidPaymentStatus("payout_failed");
     tx.payoutFailedReason = `Payout ${payout.status || event}`;
     appendTimeline(tx, `Shop payout failed · ${payout.status || event}`);

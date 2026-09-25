@@ -144,8 +144,13 @@ export interface Transaction {
   paymentStatus?: string;
   paymentMethod?: string;
   payoutUtr?: string;
+  razorpayOrderId?: string;
   razorpayPayoutId?: string;
   razorpayPaymentId?: string;
+  refundId?: string;
+  payoutFailedReason?: string;
+  capturedAmountPaise?: number;
+  orderAmountPaise?: number;
 }
 
 export interface ExpensePolicy {
