@@ -244,7 +244,7 @@ export const TransactionHistoryScreen = () => {
               title={transactions.length === 0 ? 'No expenses yet' : 'No matching expenses'}
               description={
                 transactions.length === 0
-                  ? 'Scan a merchant QR to record your first company payment. AllPay opens your UPI app to complete the bank transfer.'
+                  ? 'Scan a merchant QR. You pay AllPay via Razorpay; AllPay pays the shop.'
                   : 'Try clearing filters, or scan a merchant QR to record a payment.'
               }
               action={

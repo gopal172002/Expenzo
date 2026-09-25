@@ -3,6 +3,7 @@ import type {PaymentStatus} from '../types';
 /** True when an expense may be submitted for reimbursement. */
 export function isPaymentCaptured(status: PaymentStatus | undefined): boolean {
   return (
+    status === 'payout_processed' ||
     status === 'payment_captured' ||
     status === 'legacy_simulated' ||
     status === 'SUCCESS_REPORTED' ||

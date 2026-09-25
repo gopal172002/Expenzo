@@ -10,7 +10,7 @@ import mongoose from "mongoose";
 import request from "supertest";
 import { app } from "../server";
 import { seedDatabase } from "../seed";
-import { Attendance, Transaction, UpiIntentPayment } from "../models";
+import { Attendance, Transaction } from "../models";
 import { verifyAndPersist } from "../verificationRoutes";
 import { DEMO_COMPANY_ID } from "../tenant";
 
@@ -42,6 +42,44 @@ async function makeClaim(over: Record<string, unknown> = {}) {
     ...over,
   });
   return id;
+}
+
+async function createSettledPayment(input: {
+  id: string;
+  amount: number;
+  merchantName: string;
+  dateTime: string;
+  category?: string;
+  mcc?: string;
+}) {
+  await Transaction.create({
+    id: input.id,
+    employeeId: EMP,
+    employeeName: "Demo Employee",
+    department: "Operations",
+    merchantName: input.merchantName,
+    merchantVpa: "shop@upi",
+    mcc: input.mcc ?? "5541",
+    category: input.category ?? "Fuel",
+    amount: input.amount,
+    claimedAmount: input.amount,
+    dateTime: input.dateTime,
+    status: "pending",
+    upiApp: "Razorpay",
+    upiRefId: `UTR-${input.id}`,
+    isNewTx: true,
+    flags: [],
+    hasMatchingAllpayRecord: true,
+    purposeCategory: input.category ?? "Fuel",
+    timeline: [],
+    companyId: DEMO_COMPANY_ID,
+    paymentStatus: "payout_processed",
+    paymentMethod: "razorpay_merchant_payout",
+    orderAmountPaise: Math.round(input.amount * 100),
+    capturedAmountPaise: Math.round(input.amount * 100),
+    payoutProcessedAt: input.dateTime,
+    paymentConfirmedAt: input.dateTime,
+  });
 }
 
 describe("Claim verification", () => {
@@ -78,9 +116,8 @@ describe("Claim verification", () => {
 
   afterEach(async () => {
     await Promise.all([
-      Transaction.deleteMany({ id: /^TX-VER-/ }),
+      Transaction.deleteMany({ $or: [{ id: /^TX-VER-/ }, { id: /^PAY-TX-VER-/ }] }),
       Attendance.deleteMany({ employeeId: EMP }),
-      UpiIntentPayment.deleteMany({ employeeId: EMP }),
     ]);
   });
 
@@ -163,22 +200,19 @@ describe("Claim verification", () => {
         amount: 2150,
         claimedAmount: 2150,
       });
-      const claim = await Transaction.findOne({ id }).lean();
-
-      await UpiIntentPayment.create({
-        id: `PAY-${id}`,
-        employeeId: EMP,
-        companyId: DEMO_COMPANY_ID,
-        amountPaise: 215000,
-        currency: "INR",
-        payeeName: "Indian Oil",
-        payeeVpa: "indianoil@upi",
-        paymentMethod: "UPI_INTENT",
-        status: "SUCCESS_REPORTED",
-        launchTxnRef: `REF-${id}`,
-        initiatedAt: claim!.dateTime,
-        completedAt: claim!.dateTime,
-      });
+      await Transaction.updateOne(
+        { id },
+        {
+          $set: {
+            paymentStatus: "payout_processed",
+            paymentMethod: "razorpay_merchant_payout",
+            orderAmountPaise: 215000,
+            capturedAmountPaise: 215000,
+            payoutProcessedAt: (await Transaction.findOne({ id }).lean())?.dateTime,
+            paymentConfirmedAt: (await Transaction.findOne({ id }).lean())?.dateTime,
+          },
+        }
+      );
 
       const res = await request(app)
         .post(`/api/admin/transactions/${id}/verify`)
@@ -201,19 +235,13 @@ describe("Claim verification", () => {
       });
       const claim = await Transaction.findOne({ id }).lean();
 
-      await UpiIntentPayment.create({
+      await createSettledPayment({
         id: `PAY-${id}`,
-        employeeId: EMP,
-        companyId: DEMO_COMPANY_ID,
-        amountPaise: 215000,
-        currency: "INR",
-        payeeName: "Indian Oil",
-        payeeVpa: "indianoil@upi",
-        paymentMethod: "UPI_INTENT",
-        status: "SUCCESS_REPORTED",
-        launchTxnRef: `REF-${id}`,
-        initiatedAt: claim!.dateTime,
-        completedAt: claim!.dateTime,
+        amount: 2150,
+        merchantName: "Indian Oil",
+        dateTime: claim!.dateTime,
+        category: "Fuel",
+        mcc: "5541",
       });
 
       const res = await request(app)
@@ -336,21 +364,17 @@ describe("Claim verification", () => {
         amount: 2150,
         claimedAmount: 2150,
       });
-      const cleanClaim = await Transaction.findOne({ id: clean }).lean();
-      await UpiIntentPayment.create({
-        id: `PAY-${clean}`,
-        employeeId: EMP,
-        companyId: DEMO_COMPANY_ID,
-        amountPaise: 215000,
-        currency: "INR",
-        payeeName: "Indian Oil",
-        payeeVpa: "indianoil@upi",
-        paymentMethod: "UPI_INTENT",
-        status: "SUCCESS_REPORTED",
-        launchTxnRef: `REF-${clean}`,
-        initiatedAt: cleanClaim!.dateTime,
-        completedAt: cleanClaim!.dateTime,
-      });
+      await Transaction.updateOne(
+        { id: clean },
+        {
+          $set: {
+            paymentStatus: "payout_processed",
+            paymentMethod: "razorpay_merchant_payout",
+            orderAmountPaise: 215000,
+            capturedAmountPaise: 215000,
+          },
+        }
+      );
       await verifyAndPersist(clean, DEMO_COMPANY_ID);
 
       const risky = await makeClaim({ amount: 45, claimedAmount: 45 });

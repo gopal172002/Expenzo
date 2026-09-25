@@ -16,7 +16,13 @@ type Props = {
   height?: number | string;
 };
 
-function LocationUnavailable({ detail }: { detail?: string }) {
+function LocationUnavailable({
+  title = "Location data unavailable for this transaction",
+  detail,
+}: {
+  title?: string;
+  detail?: string;
+}) {
   return (
     <Box
       sx={{
@@ -49,7 +55,7 @@ function LocationUnavailable({ detail }: { detail?: string }) {
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.25 }}>
           <LocationOnOutlined sx={{ fontSize: 18, color: "text.secondary" }} />
           <Typography variant="body2" fontWeight={700}>
-            Location data unavailable for this transaction
+            {title}
           </Typography>
         </Box>
         <Typography variant="caption" color="text.secondary">
@@ -136,7 +142,10 @@ export function PaymentLocationMap({ coords, loading = false, height = 220 }: Pr
 
   if (!apiKey) {
     return (
-      <LocationUnavailable detail="Set VITE_GOOGLE_MAPS_API_KEY to display the payment location map." />
+      <LocationUnavailable
+        title="Payment location captured"
+        detail={`Coordinates ${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)} are on file. Set VITE_GOOGLE_MAPS_API_KEY in the dashboard env (then rebuild/redeploy) to show the map.`}
+      />
     );
   }
 

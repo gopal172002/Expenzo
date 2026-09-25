@@ -215,6 +215,11 @@ export interface ITransaction extends Document {
   paymentFailedReason?: string;
   paymentConfirmedAt?: string;
   razorpayWebhookEventIds?: string[];
+  razorpayPayoutId?: string;
+  payoutUtr?: string;
+  payoutFailedReason?: string;
+  payoutProcessedAt?: string;
+  refundId?: string;
   receiptFraudScore?: number;
   receiptFraudTier?: string;
   receiptFraudReport?: unknown;
@@ -279,6 +284,11 @@ const TransactionSchema = new Schema<ITransaction>({
   paymentFailedReason: { type: String },
   paymentConfirmedAt: { type: String },
   razorpayWebhookEventIds: { type: [String], default: [] },
+  razorpayPayoutId: { type: String },
+  payoutUtr: { type: String },
+  payoutFailedReason: { type: String },
+  payoutProcessedAt: { type: String },
+  refundId: { type: String },
   receiptFraudScore: { type: Number },
   receiptFraudTier: { type: String },
   receiptFraudReport: { type: Schema.Types.Mixed },
@@ -479,83 +489,6 @@ const ReceiptFileSchema = new Schema<IReceiptFile>({
 });
 
 export const ReceiptFile = mongoose.model<IReceiptFile>("ReceiptFile", ReceiptFileSchema);
-
-export const UPI_INTENT_STATUSES = [
-  "INITIATED",
-  "UPI_APP_OPENED",
-  "SUCCESS_REPORTED",
-  "FAILED",
-  "PENDING",
-  "UNKNOWN",
-  "CANCELLED",
-  "USER_CONFIRMED",
-] as const;
-
-export type UpiIntentStatus = (typeof UPI_INTENT_STATUSES)[number];
-
-/**
- * UPI Intent payment tracking.
- * SUCCESS_REPORTED means an external UPI app returned a success callback.
- * It is not independent NPCI/bank settlement verification.
- */
-export interface IUpiIntentPayment extends Document {
-  id: string;
-  employeeId: string;
-  companyId?: string;
-  amountPaise: number;
-  currency: string;
-  payeeName: string;
-  payeeVpa: string;
-  note?: string;
-  category?: string;
-  mcc?: string;
-  paymentMethod: string;
-  status: UpiIntentStatus;
-  launchTxnRef: string;
-  upiTxnId?: string;
-  upiTxnRef?: string;
-  approvalRefNo?: string;
-  upiResponseCode?: string;
-  initiatedAt: string;
-  returnedAt?: string;
-  completedAt?: string;
-  expenseId?: string;
-  latitude?: number | null;
-  longitude?: number | null;
-  locationCapturedAt?: string | null;
-}
-
-const UpiIntentPaymentSchema = new Schema<IUpiIntentPayment>({
-  id: { type: String, required: true, unique: true },
-  employeeId: { type: String, required: true, index: true },
-  companyId: { type: String, index: true },
-  amountPaise: { type: Number, required: true },
-  currency: { type: String, required: true, default: "INR" },
-  payeeName: { type: String, required: true },
-  payeeVpa: { type: String, required: true },
-  note: { type: String },
-  category: { type: String },
-  mcc: { type: String },
-  paymentMethod: { type: String, required: true, default: "UPI_INTENT" },
-  status: { type: String, required: true, default: "INITIATED" },
-  launchTxnRef: { type: String, required: true },
-  upiTxnId: { type: String, index: true, sparse: true },
-  upiTxnRef: { type: String },
-  approvalRefNo: { type: String },
-  upiResponseCode: { type: String },
-  initiatedAt: { type: String, required: true },
-  returnedAt: { type: String },
-  completedAt: { type: String },
-  expenseId: { type: String },
-  latitude: { type: Number, default: null },
-  longitude: { type: Number, default: null },
-  locationCapturedAt: { type: String, default: null },
-});
-
-export const UpiIntentPayment = mongoose.model<IUpiIntentPayment>(
-  "UpiIntentPayment",
-  UpiIntentPaymentSchema
-);
 
 /** Where receipt files and warehouse exports are stored for this workspace. */
 export interface IPlatformConfig extends Document {

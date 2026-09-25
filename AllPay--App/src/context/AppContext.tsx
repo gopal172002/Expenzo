@@ -46,6 +46,7 @@ type CreateUpiPaymentInput = {
 
 type AppContextValue = {
   profile: OnboardingProfile | null;
+  isReady: boolean;
   transactions: Transaction[];
   upiPayments: UpiIntentPayment[];
   policies: ExpensePolicy[];
@@ -76,6 +77,8 @@ type AppContextValue = {
       upiResponseCode?: string;
     },
   ) => Promise<UpiIntentPayment | null>;
+  upsertTransaction: (tx: Transaction) => Promise<void>;
+  patchTransaction: (id: string, patch: Partial<Transaction>) => Promise<Transaction | null>;
   logout: () => Promise<void>;
 };
 
@@ -83,6 +86,7 @@ const AppContext = createContext<AppContextValue | undefined>(undefined);
 
 export const AppProvider = ({children}: {children: React.ReactNode}) => {
   const [profile, setProfile] = useState<OnboardingProfile | null>(null);
+  const [isReady, setIsReady] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [upiPayments, setUpiPayments] = useState<UpiIntentPayment[]>([]);
   const [policies, setPolicies] = useState<ExpensePolicy[]>([]);
@@ -168,40 +172,44 @@ export const AppProvider = ({children}: {children: React.ReactNode}) => {
 
   useEffect(() => {
     const bootstrap = async () => {
-      const [savedProfile, savedTxs, savedPayments, savedDefault, savedLocation] = await Promise.all([
-        storage.getProfile(),
-        storage.getTransactions(),
-        storage.getUpiPayments(),
-        storage.getDefaultUpiAppId(),
-        storage.getLocationEnabled(),
-      ]);
-      setProfile(savedProfile);
-      profileRef.current = savedProfile;
-      setTransactions(savedTxs);
-      transactionsRef.current = savedTxs;
-      const recovered = savedPayments.map(item => ({
-        ...item,
-        status: recoverUnresolvedStatus(item.status),
-      }));
-      await saveUpiPayments(recovered);
-      setDefaultUpiAppId(savedDefault);
-      setLocationEnabled(savedLocation);
-      if (savedProfile?.employeeId) {
-        const policyRes = await fetchActivePolicies(savedProfile.employeeId);
-        if (policyRes.ok) {
-          setPolicies(policyRes.policies);
+      try {
+        const [savedProfile, savedTxs, savedPayments, savedDefault, savedLocation] = await Promise.all([
+          storage.getProfile(),
+          storage.getTransactions(),
+          storage.getUpiPayments(),
+          storage.getDefaultUpiAppId(),
+          storage.getLocationEnabled(),
+        ]);
+        setProfile(savedProfile);
+        profileRef.current = savedProfile;
+        setTransactions(savedTxs);
+        transactionsRef.current = savedTxs;
+        const recovered = savedPayments.map(item => ({
+          ...item,
+          status: recoverUnresolvedStatus(item.status),
+        }));
+        await saveUpiPayments(recovered);
+        setDefaultUpiAppId(savedDefault);
+        setLocationEnabled(savedLocation);
+        if (savedProfile?.employeeId) {
+          const policyRes = await fetchActivePolicies(savedProfile.employeeId);
+          if (policyRes.ok) {
+            setPolicies(policyRes.policies);
+          }
         }
-      }
-      const apps = await detectInstalledUpiApps();
-      setInstalledUpiApps(apps);
-      if (!savedDefault && apps.length === 1) {
-        await storage.setDefaultUpiAppId(apps[0].id);
-        setDefaultUpiAppId(apps[0].id);
+        const apps = await detectInstalledUpiApps();
+        setInstalledUpiApps(apps);
+        if (!savedDefault && apps.length === 1) {
+          await storage.setDefaultUpiAppId(apps[0].id);
+          setDefaultUpiAppId(apps[0].id);
+        }
+      } catch {
+        toast.error('Init failed', 'Could not load saved app data.');
+      } finally {
+        setIsReady(true);
       }
     };
-    bootstrap().catch(() => {
-      toast.error('Init failed', 'Could not load saved app data.');
-    });
+    bootstrap();
   }, [saveUpiPayments]);
 
   useEffect(() => {
@@ -469,6 +477,29 @@ export const AppProvider = ({children}: {children: React.ReactNode}) => {
     [locationEnabled, saveUpiPayments, upsertExpenseForPayment],
   );
 
+  const upsertTransaction = useCallback(
+    async (tx: Transaction) => {
+      const next = [tx, ...transactionsRef.current.filter(item => item.id !== tx.id)];
+      await saveTransactions(next);
+    },
+    [saveTransactions],
+  );
+
+  const patchTransaction = useCallback(
+    async (id: string, patch: Partial<Transaction>) => {
+      const current = transactionsRef.current.find(item => item.id === id);
+      if (!current) {
+        return null;
+      }
+      const updated = {...current, ...patch};
+      await saveTransactions(
+        transactionsRef.current.map(item => (item.id === id ? updated : item)),
+      );
+      return updated;
+    },
+    [saveTransactions],
+  );
+
   const logout = useCallback(async () => {
     await clearEmployeeAuth();
     await storage.clearSession();
@@ -492,6 +523,7 @@ export const AppProvider = ({children}: {children: React.ReactNode}) => {
   const value = useMemo<AppContextValue>(
     () => ({
       profile,
+      isReady,
       transactions,
       upiPayments,
       policies,
@@ -513,6 +545,8 @@ export const AppProvider = ({children}: {children: React.ReactNode}) => {
       createUpiPayment,
       markUpiAppOpened,
       applyUpiPaymentStatus,
+      upsertTransaction,
+      patchTransaction,
       logout,
     }),
     [
@@ -524,9 +558,11 @@ export const AppProvider = ({children}: {children: React.ReactNode}) => {
       defaultUpiAppId,
       installedUpiApps,
       isOnline,
+      isReady,
       lastSyncedAt,
       locationEnabled,
       markUpiAppOpened,
+      patchTransaction,
       profile,
       policies,
       queuedCount,
@@ -539,6 +575,7 @@ export const AppProvider = ({children}: {children: React.ReactNode}) => {
       syncMessage,
       transactions,
       upiPayments,
+      upsertTransaction,
     ],
   );
 

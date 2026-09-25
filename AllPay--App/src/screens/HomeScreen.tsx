@@ -245,7 +245,7 @@ export const HomeScreen = () => {
                 {latest.length === 0 ? (
                   <EmptyState
                     title="No expenses yet"
-                    description="Scan a merchant QR to record your first company payment. AllPay will open your UPI app to complete the bank transfer."
+                    description="Scan a merchant QR to pay the shop through AllPay. You pay via Razorpay; AllPay pays the merchant."
                     action={
                       <PrimaryButton
                         label="Scan & Pay"

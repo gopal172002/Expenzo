@@ -7,6 +7,7 @@ import {SafeAreaProvider} from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 import {toastConfig} from './src/config/toastConfig';
 import {FloatingTabBar} from './src/components/FloatingTabBar';
+import {SplashScreen} from './src/components/SplashScreen';
 import {AppProvider, useAppData} from './src/context/AppContext';
 import {RootStackParamList} from './src/navigation';
 import {HomeScreen} from './src/screens/HomeScreen';
@@ -52,58 +53,75 @@ const MainTabs = () => (
 );
 
 const Navigator = () => {
-  const {profile} = useAppData();
+  const {profile, isReady} = useAppData();
+
+  if (!isReady) {
+    return (
+      <>
+        <StatusBar barStyle="light-content" backgroundColor="#0B1C3F" />
+        <SplashScreen />
+      </>
+    );
+  }
+
   if (!profile) {
-    return <OnboardingScreen />;
+    return (
+      <>
+        <StatusBar barStyle="dark-content" backgroundColor={colors.page} />
+        <OnboardingScreen />
+      </>
+    );
   }
 
   return (
-    <NavigationContainer theme={navigationTheme}>
-      <Stack.Navigator
-        screenOptions={{
-          headerBackTitle: '',
-          headerShadowVisible: false,
-          headerTintColor: colors.primary,
-          headerTitleStyle: {color: colors.navy, fontWeight: '700'},
-          headerStyle: {backgroundColor: colors.paper},
-          contentStyle: {backgroundColor: colors.page},
-          animation: 'slide_from_right',
-        }}>
-        <Stack.Screen
-          name="MainTabs"
-          component={MainTabs}
-          options={{headerShown: false}}
-        />
-        <Stack.Screen name="Scan" component={ScannerScreen} options={{title: 'Scan QR'}} />
-        <Stack.Screen
-          name="Payment"
-          component={PaymentScreen}
-          options={{title: 'Confirm payment'}}
-        />
-        <Stack.Screen
-          name="PaymentQrPay"
-          component={PaymentQrPayScreen}
-          options={{title: 'Scan to pay'}}
-        />
-        <Stack.Screen
-          name="PaymentResult"
-          component={PaymentResultScreen}
-          options={{title: 'Payment result'}}
-        />
-        <Stack.Screen
-          name="TransactionDetail"
-          component={TransactionDetailScreen}
-          options={{title: 'Expense detail'}}
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.page} />
+      <NavigationContainer theme={navigationTheme}>
+        <Stack.Navigator
+          screenOptions={{
+            headerBackTitle: '',
+            headerShadowVisible: false,
+            headerTintColor: colors.primary,
+            headerTitleStyle: {color: colors.navy, fontWeight: '700'},
+            headerStyle: {backgroundColor: colors.paper},
+            contentStyle: {backgroundColor: colors.page},
+            animation: 'slide_from_right',
+          }}>
+          <Stack.Screen
+            name="MainTabs"
+            component={MainTabs}
+            options={{headerShown: false}}
+          />
+          <Stack.Screen name="Scan" component={ScannerScreen} options={{title: 'Scan QR'}} />
+          <Stack.Screen
+            name="Payment"
+            component={PaymentScreen}
+            options={{title: 'Confirm payment'}}
+          />
+          <Stack.Screen
+            name="PaymentQrPay"
+            component={PaymentQrPayScreen}
+            options={{title: 'Scan to pay'}}
+          />
+          <Stack.Screen
+            name="PaymentResult"
+            component={PaymentResultScreen}
+            options={{title: 'Payment result'}}
+          />
+          <Stack.Screen
+            name="TransactionDetail"
+            component={TransactionDetailScreen}
+            options={{title: 'Expense detail'}}
+          />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </>
   );
 };
 
 function App() {
   return (
     <SafeAreaProvider>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.page} />
       <AppProvider>
         <Navigator />
       </AppProvider>

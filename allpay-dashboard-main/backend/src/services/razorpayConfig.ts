@@ -4,6 +4,11 @@ const PAYMENT_STATUSES = [
   "checkout_opened",
   "payment_processing",
   "payment_captured",
+  "payout_initiated",
+  "payout_processed",
+  "payout_failed",
+  "refund_initiated",
+  "refunded",
   "payment_failed",
   "payment_abandoned",
   "legacy_simulated",
@@ -12,6 +17,9 @@ const PAYMENT_STATUSES = [
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
 const TERMINAL_PAYMENT_STATUSES: ReadonlySet<PaymentStatus> = new Set([
+  "payout_processed",
+  "payout_failed",
+  "refunded",
   "payment_captured",
   "payment_failed",
   "payment_abandoned",
@@ -34,13 +42,27 @@ function isTerminalPaymentStatus(status: PaymentStatus | undefined): boolean {
 }
 
 export function isPaymentCaptured(status: PaymentStatus | undefined): boolean {
-  return status === "payment_captured" || status === "legacy_simulated";
+  return (
+    status === "payout_processed" ||
+    status === "payment_captured" ||
+    status === "legacy_simulated"
+  );
+}
+
+export function isMerchantPayoutComplete(status: PaymentStatus | undefined): boolean {
+  return status === "payout_processed";
+}
+
+export function isShopPayoutEnabled(config = loadRazorpayConfig()): boolean {
+  return Boolean(config.accountNumber);
 }
 
 export type RazorpayRuntimeConfig = {
   keyId: string;
   keySecret: string;
   webhookSecret: string;
+  payoutWebhookSecret: string;
+  accountNumber: string;
   useRazorpayUpi: boolean;
   isProduction: boolean;
 };
@@ -51,6 +73,9 @@ export function loadRazorpayConfig(): RazorpayRuntimeConfig {
   const keyId = process.env.RAZORPAY_KEY_ID?.trim() ?? "";
   const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim() ?? "";
   const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET?.trim() ?? "";
+  const payoutWebhookSecret =
+    process.env.RAZORPAYX_WEBHOOK_SECRET?.trim() || webhookSecret;
+  const accountNumber = process.env.RAZORPAYX_ACCOUNT_NUMBER?.trim() ?? "";
 
   if (isProduction && useRazorpayUpi) {
     if (!keyId || !keySecret || !webhookSecret) {
@@ -60,7 +85,15 @@ export function loadRazorpayConfig(): RazorpayRuntimeConfig {
     }
   }
 
-  return { keyId, keySecret, webhookSecret, useRazorpayUpi, isProduction };
+  return {
+    keyId,
+    keySecret,
+    webhookSecret,
+    payoutWebhookSecret,
+    accountNumber,
+    useRazorpayUpi,
+    isProduction,
+  };
 }
 
 export function requireRazorpaySecrets(config: RazorpayRuntimeConfig): void {

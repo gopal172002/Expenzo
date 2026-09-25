@@ -1,16 +1,65 @@
 import dayjs from "dayjs";
-import { Attendance, Transaction, UpiIntentPayment } from "./models";
+import { Attendance, Transaction } from "./models";
 import { DEMO_EMPLOYEE_ID } from "./demoEmployeeData";
 import { DEMO_COMPANY_ID } from "./tenant";
 
 /**
  * Demo data for the verification engine: some claims are backed by a real AllPay
- * payment, one is inflated above what was actually paid, and one travel claim lands
- * inside an office shift. Without this the dashboard cannot show what it can catch.
+ * merchant payout, one is inflated above what was actually paid, and one travel
+ * claim lands inside an office shift.
  */
 const MATCHED_CLAIMS = ["TX-DEMO-1004", "TX-DEMO-1005", "TX-DEMO-1015", "TX-DEMO-1016"];
 const INFLATED_CLAIM = "TX-DEMO-1013";
 const OFFICE_SHIFT_CLAIMS = ["TX-DEMO-1010", "TX-DEMO-1011"];
+
+async function upsertSettledPayment(input: {
+  id: string;
+  employeeId: string;
+  companyId?: string;
+  merchantName: string;
+  category: string;
+  mcc: string;
+  amount: number;
+  dateTime: string;
+}): Promise<void> {
+  const amountPaise = Math.round(input.amount * 100);
+  await Transaction.updateOne(
+    { id: input.id },
+    {
+      $set: {
+        id: input.id,
+        employeeId: input.employeeId,
+        ...(input.companyId ? { companyId: input.companyId } : {}),
+        employeeName: "Demo Employee",
+        department: "Operations",
+        merchantName: input.merchantName,
+        merchantVpa: `${input.merchantName.toLowerCase().replace(/[^a-z0-9]/g, "")}@upi`,
+        mcc: input.mcc,
+        category: input.category,
+        amount: input.amount,
+        claimedAmount: input.amount,
+        dateTime: input.dateTime,
+        status: "pending",
+        upiApp: "Razorpay",
+        upiRefId: `UTR-${input.id}`,
+        isNewTx: true,
+        flags: [],
+        hasMatchingAllpayRecord: true,
+        purposeCategory: input.category,
+        timeline: [],
+        paymentStatus: "payout_processed",
+        paymentMethod: "razorpay_merchant_payout",
+        expenseSource: "ALLPAY_MERCHANT_PAYOUT",
+        orderAmountPaise: amountPaise,
+        capturedAmountPaise: amountPaise,
+        payoutUtr: `UTR-${input.id}`,
+        payoutProcessedAt: input.dateTime,
+        paymentConfirmedAt: input.dateTime,
+      },
+    },
+    { upsert: true }
+  );
+}
 
 export async function seedVerificationDemoData(): Promise<{
   payments: number;
@@ -24,31 +73,35 @@ export async function seedVerificationDemoData(): Promise<{
   for (const claim of claims) {
     if (OFFICE_SHIFT_CLAIMS.includes(claim.id)) continue;
 
-    // The inflated claim pays only part of what the employee later claimed.
     const paidAmount = claim.id === INFLATED_CLAIM ? Math.round(claim.amount * 0.4) : claim.amount;
-    const paymentId = `PAY-DEMO-${claim.id}`;
-    await UpiIntentPayment.updateOne(
-      { id: paymentId },
-      {
-        $set: {
-          id: paymentId,
-          employeeId: claim.employeeId,
-          companyId: claim.companyId || undefined,
-          amountPaise: Math.round(paidAmount * 100),
-          currency: "INR",
-          payeeName: claim.merchantName,
-          payeeVpa: `${claim.merchantName.toLowerCase().replace(/[^a-z0-9]/g, "")}@upi`,
-          category: claim.category,
-          mcc: claim.mcc,
-          paymentMethod: "UPI_INTENT",
-          status: "SUCCESS_REPORTED",
-          launchTxnRef: `REF-${claim.id}`,
-          initiatedAt: claim.dateTime,
-          completedAt: claim.dateTime,
-        },
-      },
-      { upsert: true }
-    );
+    if (claim.id === INFLATED_CLAIM) {
+      await upsertSettledPayment({
+        id: `PAY-DEMO-${claim.id}`,
+        employeeId: claim.employeeId,
+        companyId: claim.companyId || undefined,
+        merchantName: claim.merchantName,
+        category: claim.category,
+        mcc: claim.mcc,
+        amount: paidAmount,
+        dateTime: claim.dateTime,
+      });
+    } else {
+      await Transaction.updateOne(
+        { id: claim.id },
+        {
+          $set: {
+            paymentStatus: "payout_processed",
+            hasMatchingAllpayRecord: true,
+            paymentMethod: "razorpay_merchant_payout",
+            expenseSource: "ALLPAY_MERCHANT_PAYOUT",
+            orderAmountPaise: Math.round(claim.amount * 100),
+            capturedAmountPaise: Math.round(claim.amount * 100),
+            payoutProcessedAt: claim.dateTime,
+            paymentConfirmedAt: claim.dateTime,
+          },
+        }
+      );
+    }
     payments += 1;
   }
 
@@ -75,9 +128,6 @@ export async function seedVerificationDemoData(): Promise<{
     attendance += 1;
   }
 
-  // A normal office day for the demo employee so the attendance sheet is not empty.
-  // Only days without another demo claim are seeded, so the sheet does not
-  // accidentally contradict claims that are meant to verify cleanly.
   const claimDates = new Set(
     (await Transaction.find({ employeeId: DEMO_EMPLOYEE_ID, companyId: DEMO_COMPANY_ID })
       .select({ dateTime: 1 })

@@ -1,6 +1,6 @@
 import {RouteProp, useNavigation, useRoute} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import React, {useMemo} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import {
   ErrorState,
@@ -16,29 +16,109 @@ import {useAppData} from '../context/AppContext';
 import {RootStackParamList} from '../navigation';
 import {colors, spacing} from '../theme/tokens';
 import {maskRef} from '../upi/mask';
-import {paiseToRupeeLabel} from '../upi/money';
-import {expenseIdForPayment} from '../upi/payment/expenseFromPayment';
+import {fetchMerchantPaymentStatus} from '../services/razorpayMerchantPay';
 
 type Route = RouteProp<RootStackParamList, 'PaymentResult'>;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
+const RESULT_COPY: Record<string, {title: string; body: string}> = {
+  payout_processed: {
+    title: 'Shop paid',
+    body: 'Razorpay confirmed your payment to AllPay, and AllPay paid this merchant. Finance can now review the expense.',
+  },
+  payment_captured: {
+    title: 'Payment received',
+    body: 'Razorpay confirmed your payment to AllPay. Shop payout is skipped until RazorpayX is available.',
+  },
+  payout_initiated: {
+    title: 'Paying the shop',
+    body: 'AllPay has started the UPI payout to this merchant. This usually completes in a few seconds.',
+  },
+  payment_processing: {
+    title: 'Confirming payment',
+    body: 'Razorpay is confirming your checkout. AllPay will pay the shop as soon as it is captured.',
+  },
+  order_created: {
+    title: 'Order created',
+    body: 'Checkout did not finish. No money was taken from you and the shop was not paid.',
+  },
+  checkout_opened: {
+    title: 'Checkout opened',
+    body: 'Razorpay was opened but the payment did not complete.',
+  },
+  payment_abandoned: {
+    title: 'Payment cancelled',
+    body: 'You closed Razorpay before paying. No expense was added.',
+  },
+  payment_failed: {
+    title: 'Payment failed',
+    body: 'Razorpay could not collect the payment. The shop was not paid.',
+  },
+  payout_failed: {
+    title: 'Shop payout failed',
+    body: 'AllPay received your money but could not pay the shop. A refund should follow.',
+  },
+  refund_initiated: {
+    title: 'Refund started',
+    body: 'The shop payout failed. AllPay is refunding your Razorpay payment.',
+  },
+  refunded: {
+    title: 'Refunded',
+    body: 'The shop was not paid. Your payment to AllPay has been refunded.',
+  },
+};
+
 export const PaymentResultScreen = () => {
   const navigation = useNavigation<Nav>();
   const {paymentId} = useRoute<Route>().params;
-  const {upiPayments, applyUpiPaymentStatus, transactions, isOnline, queuedCount} = useAppData();
-  const payment = useMemo(
-    () => upiPayments.find(item => item.id === paymentId),
-    [paymentId, upiPayments],
-  );
+  const {transactions, patchTransaction, isOnline} = useAppData();
+  const [polling, setPolling] = useState(false);
+
   const expense = useMemo(
-    () =>
-      transactions.find(
-        item => item.paymentId === paymentId || item.id === payment?.expenseId,
-      ),
-    [payment?.expenseId, paymentId, transactions],
+    () => transactions.find(item => item.id === paymentId || item.paymentId === paymentId),
+    [paymentId, transactions],
   );
 
-  if (!payment) {
+  useEffect(() => {
+    if (!expense) {
+      return;
+    }
+    const status = expense.paymentStatus;
+    if (
+      status === 'payout_processed' ||
+      status === 'payment_captured' ||
+      status === 'refunded' ||
+      status === 'payment_failed' ||
+      status === 'payment_abandoned'
+    ) {
+      return;
+    }
+    let cancelled = false;
+    setPolling(true);
+    void fetchMerchantPaymentStatus(paymentId)
+      .then(async latest => {
+        if (cancelled) {
+          return;
+        }
+        await patchTransaction(paymentId, {
+          paymentStatus: latest.paymentStatus as NonNullable<typeof expense.paymentStatus>,
+          razorpayPaymentId: latest.razorpayPaymentId ?? expense.razorpayPaymentId,
+          upiRefId: latest.payoutUtr ?? expense.upiRefId,
+          paymentFailedReason: latest.payoutFailedReason ?? expense.paymentFailedReason,
+        });
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) {
+          setPolling(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [expense, paymentId, patchTransaction]);
+
+  if (!expense) {
     return (
       <Screen safeTop={false}>
         <View style={styles.centered}>
@@ -54,134 +134,77 @@ export const PaymentResultScreen = () => {
     );
   }
 
-  const amountLabel = `₹${paiseToRupeeLabel(payment.amountPaise)}`;
-  const status = payment.status;
-
-  const title =
-    status === 'SUCCESS_REPORTED'
-      ? 'Success reported'
-      : status === 'FAILED'
-        ? 'Payment failed'
-        : status === 'PENDING'
-          ? 'Payment pending'
-          : status === 'CANCELLED'
-            ? 'Payment cancelled'
-            : status === 'USER_CONFIRMED'
-              ? 'Recorded by you'
-              : status === 'UPI_APP_OPENED'
-                ? 'UPI app opened'
-                : status === 'INITIATED'
-                  ? 'Payment initiated'
-                  : 'Status unknown';
-
-  const subtitle =
-    status === 'SUCCESS_REPORTED'
-      ? 'Your UPI app reported a successful payment. AllPay recorded this expense for your company — this is not an independent bank settlement confirmation.'
-      : status === 'FAILED'
-        ? 'The bank or UPI app declined this payment. No expense was added. You can try again with another UPI app or a merchant QR.'
-        : status === 'PENDING'
-          ? 'The UPI app reported that this transaction is still pending. Do not pay again unless you know the first attempt failed.'
-          : status === 'CANCELLED'
-            ? 'The UPI app was closed before a result was returned. No expense was added.'
-            : status === 'USER_CONFIRMED'
-              ? 'You confirmed this payment manually. This is not a UPI success callback — finance may ask for proof.'
-              : status === 'UPI_APP_OPENED'
-                ? 'Your UPI app was opened. Complete the payment there, then return. Opening the app alone does not mean the payment succeeded.'
-                : status === 'INITIATED'
-                  ? 'Payment was created but the UPI app has not returned a result yet.'
-                  : "We could not determine the result. If money left your account, record the expense below — otherwise try again.";
-
-  const openExpense = () => {
-    const id = expense?.id ?? expenseIdForPayment(payment.id);
-    navigation.replace('TransactionDetail', {transactionId: id});
+  const status = expense.paymentStatus ?? 'order_created';
+  const copy = RESULT_COPY[status] ?? {
+    title: 'Payment update',
+    body: 'AllPay is updating this merchant payment.',
   };
-
-  const recordManuallyLabel =
-    status === 'UPI_APP_OPENED' || status === 'UNKNOWN' || status === 'INITIATED'
-      ? 'I paid — record expense'
-      : 'Record manually';
-
-  const expenseStatus = expense?.status ?? 'Not created yet';
+  const amountLabel = `₹${Number(expense.amount).toLocaleString('en-IN')}`;
+  const success = status === 'payout_processed' || status === 'payment_captured';
+  const failed =
+    status === 'payment_failed' ||
+    status === 'payout_failed' ||
+    status === 'refunded' ||
+    status === 'payment_abandoned';
 
   return (
     <Screen safeTop={false}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <ScreenHeader title={title} subtitle={payment.payeeName} />
+        <ScreenHeader title={copy.title} subtitle={expense.merchant.name} />
         <PaymentStatusCard
           amount={amountLabel}
-          payee={payment.payeeName}
+          payee={expense.merchant.name}
           status={status}
-          explanation={subtitle}
-          reference={
-            status === 'SUCCESS_REPORTED'
-              ? maskRef(payment.upiTxnId ?? payment.upiTxnRef)
-              : undefined
-          }
+          explanation={copy.body}
+          reference={success ? maskRef(expense.upiRefId) : undefined}
         />
 
-        <Section title="What this means">
+        <Section title="What happened">
           <Text style={styles.body}>
-            <Text style={styles.strong}>Payment status</Text> is what your UPI app reported to
-            AllPay.
+            <Text style={styles.strong}>You → AllPay</Text> via Razorpay checkout.
           </Text>
           <Text style={[styles.body, styles.bodySpaced]}>
-            <Text style={styles.strong}>Expense / reimbursement</Text>: {expenseStatus}. Finance
-            decides approval later — a recorded payment is not an approved claim.
+            <Text style={styles.strong}>AllPay → shop</Text> {expense.merchant.vpa} via instant UPI
+            payout.
           </Text>
+          {expense.paymentFailedReason ? (
+            <Text style={[styles.body, styles.bodySpaced]}>{expense.paymentFailedReason}</Text>
+          ) : null}
         </Section>
 
-        {!isOnline ? (
-          <InfoBanner tone="offline" title="Offline result">
-            This result is saved on your device
-            {queuedCount > 0 ? ` (${queuedCount} queued)` : ''}. It will sync to your company
-            account when you reconnect.
+        {polling ? (
+          <InfoBanner tone="warning" title="Checking shop payout">
+            Refreshing status from AllPay.
           </InfoBanner>
         ) : null}
 
-        {status === 'SUCCESS_REPORTED' || status === 'USER_CONFIRMED' ? (
+        {!isOnline ? (
+          <InfoBanner tone="offline" title="Offline">
+            This device is offline. Status will refresh when you reconnect.
+          </InfoBanner>
+        ) : null}
+
+        {success ? (
           <>
-            <PrimaryButton label="View expense" onPress={openExpense} />
-            <SecondaryButton label="Add receipt" onPress={openExpense} />
+            <PrimaryButton
+              label="View expense"
+              onPress={() => navigation.replace('TransactionDetail', {transactionId: expense.id})}
+            />
+            <SecondaryButton
+              label="Add receipt"
+              onPress={() => navigation.replace('TransactionDetail', {transactionId: expense.id})}
+            />
           </>
         ) : null}
 
-        {status === 'FAILED' || status === 'CANCELLED' ? (
+        {failed ? (
           <PrimaryButton
             label="Retry payment"
-            onPress={() =>
-              navigation.replace('Payment', {
-                merchant: {
-                  vpa: payment.payeeVpa,
-                  name: payment.payeeName,
-                  category: payment.category,
-                  mcc: payment.mcc,
-                  amountPaise: payment.amountPaise,
-                  note: payment.note,
-                },
-              })
-            }
+            onPress={() => navigation.replace('Payment', {merchant: expense.merchant})}
           />
         ) : null}
 
-        {status === 'UNKNOWN' ||
-        status === 'PENDING' ||
-        status === 'UPI_APP_OPENED' ||
-        status === 'INITIATED' ? (
-          <>
-            <PrimaryButton
-              label={recordManuallyLabel}
-              onPress={async () => {
-                await applyUpiPaymentStatus(payment.id, 'USER_CONFIRMED');
-              }}
-            />
-            <SecondaryButton
-              label={status === 'PENDING' ? 'Keep pending' : 'Return to Home'}
-              onPress={() => navigation.popToTop()}
-            />
-          </>
-        ) : (
-          <SecondaryButton label="Return to Home" onPress={() => navigation.popToTop()} />
-        )}
+        <SecondaryButton label="Return to Home" onPress={() => navigation.popToTop()} />
       </ScrollView>
     </Screen>
   );

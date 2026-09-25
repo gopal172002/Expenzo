@@ -3,7 +3,6 @@ import {
   Attendance,
   ExpensePolicy as ExpensePolicyModel,
   Transaction,
-  UpiIntentPayment,
 } from "../../models";
 import {
   buildMonthlySpendMap,
@@ -149,9 +148,10 @@ export async function verifyClaim(claim: ClaimContext): Promise<VerificationResu
   const tenant = { companyId, employeeId: claim.employeeId };
 
   const [paymentDocs, priorDocs, attendanceDoc, policyDocs] = await Promise.all([
-    UpiIntentPayment.find({
+    Transaction.find({
       ...tenant,
-      initiatedAt: {
+      paymentStatus: { $in: ["payout_processed", "payment_captured"] },
+      dateTime: {
         $gte: claimDate.subtract(7, "day").toISOString(),
         $lte: claimDate.add(7, "day").toISOString(),
       },
@@ -179,7 +179,9 @@ export async function verifyClaim(claim: ClaimContext): Promise<VerificationResu
     ExpensePolicyModel.find({ companyId, active: true }).lean(),
   ]);
 
-  const priorClaims: PriorClaim[] = priorDocs.map((doc) => ({
+  const priorClaims: PriorClaim[] = priorDocs
+    .filter((doc) => !String(doc.id).startsWith("PAY-"))
+    .map((doc) => ({
     id: doc.id,
     employeeId: doc.employeeId,
     merchantName: doc.merchantName,
@@ -193,13 +195,13 @@ export async function verifyClaim(claim: ClaimContext): Promise<VerificationResu
   const payments: AllpayPayment[] = paymentDocs.map((doc) => ({
     id: doc.id,
     employeeId: doc.employeeId,
-    amountPaise: doc.amountPaise,
-    payeeName: doc.payeeName,
-    status: doc.status,
-    initiatedAt: doc.initiatedAt,
+    amountPaise: doc.orderAmountPaise ?? Math.round(Number(doc.amount) * 100),
+    payeeName: doc.merchantName,
+    status: String(doc.paymentStatus || "payout_processed"),
+    initiatedAt: doc.dateTime,
     ...(doc.category ? { category: doc.category } : {}),
     ...(doc.mcc ? { mcc: doc.mcc } : {}),
-    ...(doc.completedAt ? { completedAt: doc.completedAt } : {}),
+    completedAt: doc.payoutProcessedAt ?? doc.paymentConfirmedAt ?? doc.dateTime,
   }));
 
   const attendance: AttendanceDay | null = attendanceDoc

@@ -4,11 +4,18 @@ import dayjs from "dayjs";
 import { ITransaction, ProcessedWebhookEvent, Transaction } from "../models";
 import {
   assertValidPaymentStatus,
+  isShopPayoutEnabled,
   loadRazorpayConfig,
   requireRazorpaySecrets,
   type PaymentStatus,
 } from "./razorpayConfig";
 import { applyLocationToRecord } from "./paymentLocation";
+import { assertMerchantPayee } from "./merchantPayee";
+import {
+  applyPayoutWebhookToTransaction,
+  refundCapturedPayment,
+  settleMerchantPayout,
+} from "./razorpayPayoutService";
 
 export type CreateOrderInput = {
   txId: string;
@@ -33,6 +40,7 @@ export type CreateOrderResult = {
   currency: string;
   keyId: string;
   txId: string;
+  shopPayoutEnabled: boolean;
 };
 
 export type ConfirmPaymentInput = {
@@ -102,6 +110,10 @@ function amountToPaise(amount: number): number {
 export async function createRazorpayOrder(input: CreateOrderInput): Promise<CreateOrderResult> {
   const config = loadRazorpayConfig();
   requireRazorpaySecrets(config);
+  const payee = assertMerchantPayee({
+    vpa: input.merchant.vpa,
+    mcc: input.merchant.mcc,
+  });
 
   if (input.merchant.amount !== undefined && input.merchant.amount > 0) {
     const qrPaise = amountToPaise(input.merchant.amount);
@@ -126,6 +138,7 @@ export async function createRazorpayOrder(input: CreateOrderInput): Promise<Crea
       currency: "INR",
       keyId: config.keyId,
       txId: input.txId,
+      shopPayoutEnabled: isShopPayoutEnabled(config),
     };
   }
   if (existing?.razorpayOrderId && existing.orderAmountPaise !== amountPaise) {
@@ -142,7 +155,7 @@ export async function createRazorpayOrder(input: CreateOrderInput): Promise<Crea
     notes: {
       employeeId: input.employeeId,
       ...(input.companyId ? { companyId: input.companyId } : {}),
-      merchantVpa: input.merchant.vpa,
+      merchantVpa: payee.vpa,
       merchantName: input.merchant.name,
     },
   });
@@ -155,7 +168,7 @@ export async function createRazorpayOrder(input: CreateOrderInput): Promise<Crea
     employeeName: input.employeeName,
     department: input.department,
     merchantName: input.merchant.name || "Unknown",
-    mcc: input.merchant.mcc || "5999",
+    mcc: payee.mcc,
     category: input.merchant.category || "office",
     amount: input.amount,
     claimedAmount: input.amount,
@@ -167,11 +180,12 @@ export async function createRazorpayOrder(input: CreateOrderInput): Promise<Crea
     flags: [],
     hasMatchingAllpayRecord: false,
     purposeCategory: input.merchant.category || "General",
-    merchantVpa: input.merchant.vpa,
+    merchantVpa: payee.vpa,
     paymentStatus: "order_created" as PaymentStatus,
     razorpayOrderId: orderId,
     orderAmountPaise: amountPaise,
-    paymentMethod: "razorpay_upi",
+    paymentMethod: "razorpay_merchant_payout",
+    expenseSource: "ALLPAY_MERCHANT_PAYOUT",
   };
 
   if (existing) {
@@ -199,6 +213,7 @@ export async function createRazorpayOrder(input: CreateOrderInput): Promise<Crea
     currency: "INR",
     keyId: config.keyId,
     txId: input.txId,
+    shopPayoutEnabled: isShopPayoutEnabled(config),
   };
 }
 
@@ -230,18 +245,29 @@ export async function confirmRazorpayPayment(input: ConfirmPaymentInput): Promis
     throw err;
   }
 
-  if (tx.paymentStatus !== "payment_captured") {
-    tx.paymentStatus = "payment_processing";
+  if (
+    tx.paymentStatus !== "payment_captured" &&
+    tx.paymentStatus !== "payout_initiated" &&
+    tx.paymentStatus !== "payout_processed"
+  ) {
     tx.razorpayPaymentId = input.razorpay_payment_id;
     tx.upiRefId = input.razorpay_payment_id;
-    appendTimeline(tx, "Payment confirmed via SDK (awaiting webhook)");
+    tx.paymentStatus = "payment_captured";
+    tx.hasMatchingAllpayRecord = !config.accountNumber;
+    tx.paymentConfirmedAt = dayjs().toISOString();
+    appendTimeline(
+      tx,
+      config.accountNumber
+        ? "Employee paid AllPay via Razorpay · paying shop next"
+        : "Employee paid AllPay via Razorpay · shop payout waiting for RazorpayX"
+    );
   }
   if (input.location && (tx.latitude == null || tx.longitude == null)) {
     applyLocationToRecord(tx, input.location);
   }
   await tx.save();
-
-  return tx;
+  const settled = await settleMerchantPayout(tx.id);
+  return settled ?? tx;
 }
 
 type RazorpayWebhookEvent = {
@@ -250,6 +276,7 @@ type RazorpayWebhookEvent = {
   payload?: {
     payment?: { entity?: Record<string, unknown> };
     order?: { entity?: Record<string, unknown> };
+    payout?: { entity?: Record<string, unknown> };
   };
 };
 
@@ -259,7 +286,11 @@ export async function handleRazorpayWebhookEvent(
   eventIdHeader?: string
 ): Promise<{ ok: boolean; duplicate?: boolean }> {
   const config = loadRazorpayConfig();
-  if (!verifyWebhookSignature(rawBody, signature, config.webhookSecret)) {
+  const signed =
+    verifyWebhookSignature(rawBody, signature, config.webhookSecret) ||
+    (config.payoutWebhookSecret !== config.webhookSecret &&
+      verifyWebhookSignature(rawBody, signature, config.payoutWebhookSecret));
+  if (!signed) {
     const err = new Error("Invalid webhook signature");
     (err as Error & { statusCode?: number }).statusCode = 400;
     throw err;
@@ -281,14 +312,11 @@ export async function handleRazorpayWebhookEvent(
 
   const paymentEntity = event.payload?.payment?.entity;
   const orderEntity = event.payload?.order?.entity;
+  const payoutEntity = event.payload?.payout?.entity;
 
   let orderId =
     (paymentEntity?.order_id as string | undefined) ??
     (orderEntity?.id as string | undefined);
-
-  if (!orderId && paymentEntity?.id) {
-    orderId = undefined;
-  }
 
   const receipt =
     (orderEntity?.receipt as string | undefined) ??
@@ -300,6 +328,12 @@ export async function handleRazorpayWebhookEvent(
   }
   if (!tx && receipt) {
     tx = await Transaction.findOne({ id: receipt }).exec();
+  }
+  if (!tx && payoutEntity?.id) {
+    tx = await Transaction.findOne({ razorpayPayoutId: String(payoutEntity.id) }).exec();
+  }
+  if (!tx && payoutEntity?.reference_id) {
+    tx = await Transaction.findOne({ id: String(payoutEntity.reference_id) }).exec();
   }
 
   if (!tx) {
@@ -313,23 +347,46 @@ export async function handleRazorpayWebhookEvent(
     tx.razorpayWebhookEventIds.push(eventId);
   }
 
+  if (String(event.event).startsWith("payout.")) {
+    const changed = applyPayoutWebhookToTransaction(tx, event.event, {
+      id: payoutEntity?.id as string | undefined,
+      status: payoutEntity?.status as string | undefined,
+      utr: payoutEntity?.utr as string | undefined,
+      reference_id: payoutEntity?.reference_id as string | undefined,
+    });
+    if (changed) {
+      await tx.save();
+    }
+    if (tx.paymentStatus === "payout_failed" && !tx.refundId) {
+      await refundCapturedPayment(tx, tx.payoutFailedReason || "Shop payout failed");
+    }
+    return { ok: true };
+  }
+
   if (event.event === "payment.captured" || event.event === "order.paid") {
-    const paymentId = paymentEntity?.id as string | undefined;
-    const capturedAmount = paymentEntity?.amount as number | undefined;
-    tx.paymentStatus = assertValidPaymentStatus("payment_captured");
-    if (paymentId) {
-      tx.razorpayPaymentId = paymentId;
-      tx.upiRefId = paymentId;
+    if (tx.paymentStatus !== "payout_processed") {
+      const paymentId = paymentEntity?.id as string | undefined;
+      const capturedAmount = paymentEntity?.amount as number | undefined;
+      tx.paymentStatus = assertValidPaymentStatus("payment_captured");
+      if (paymentId) {
+        tx.razorpayPaymentId = paymentId;
+      }
+      if (typeof capturedAmount === "number") {
+        tx.capturedAmountPaise = capturedAmount;
+      }
+      tx.hasMatchingAllpayRecord = !config.accountNumber;
+      tx.paymentConfirmedAt = dayjs().toISOString();
+      appendTimeline(
+        tx,
+        config.accountNumber
+          ? "Employee payment captured · paying shop next"
+          : "Employee payment captured · shop payout skipped"
+      );
+      await tx.save();
+      await settleMerchantPayout(tx.id);
     }
-    if (typeof capturedAmount === "number") {
-      tx.capturedAmountPaise = capturedAmount;
-    }
-    tx.hasMatchingAllpayRecord = true;
-    tx.paymentConfirmedAt = dayjs().toISOString();
-    appendTimeline(tx, `Webhook: ${event.event}`);
-    await tx.save();
   } else if (event.event === "payment.failed") {
-    if (tx.paymentStatus !== "payment_captured") {
+    if (tx.paymentStatus !== "payment_captured" && tx.paymentStatus !== "payout_processed") {
       tx.paymentStatus = assertValidPaymentStatus("payment_failed");
       tx.paymentFailedReason =
         (paymentEntity?.error_description as string | undefined) ?? "Payment failed";
@@ -345,7 +402,13 @@ export async function markCheckoutOpened(txId: string, companyId?: string): Prom
   const query: Record<string, unknown> = { id: txId };
   if (companyId) query.companyId = companyId;
   const tx = await Transaction.findOne(query).exec();
-  if (!tx || tx.paymentStatus === "payment_captured") {
+  if (
+    !tx ||
+    tx.paymentStatus === "payment_captured" ||
+    tx.paymentStatus === "payout_initiated" ||
+    tx.paymentStatus === "payout_processed" ||
+    tx.paymentStatus === "refunded"
+  ) {
     return;
   }
   if (tx.paymentStatus === "order_created") {

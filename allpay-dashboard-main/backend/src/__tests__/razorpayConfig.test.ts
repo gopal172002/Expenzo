@@ -22,6 +22,7 @@ describe("razorpayConfig", () => {
 
   it("accepts known payment statuses", () => {
     expect(isValidPaymentStatus("payment_captured")).toBe(true);
+    expect(isValidPaymentStatus("payout_processed")).toBe(true);
     expect(assertValidPaymentStatus("order_created")).toBe("order_created");
   });
 

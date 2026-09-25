@@ -24,6 +24,7 @@ import {
   resetRazorpayClientForTests,
   verifyPaymentSignature,
 } from "../services/razorpayService";
+import { setPayoutApiForTests, settleMerchantPayout } from "../services/razorpayPayoutService";
 
 const keySecret = "test_secret";
 const webhookSecret = "whsec_test";
@@ -36,7 +37,16 @@ describe("Razorpay integration", () => {
     process.env.RAZORPAY_KEY_SECRET = keySecret;
     process.env.RAZORPAY_WEBHOOK_SECRET = webhookSecret;
     process.env.USE_RAZORPAY_UPI = "true";
+    process.env.RAZORPAYX_ACCOUNT_NUMBER = "2323230003046";
     resetRazorpayClientForTests();
+    setPayoutApiForTests({
+      createVpaPayout: async ({ referenceId }) => ({
+        id: `pout_${referenceId}`,
+        status: "processed",
+        utr: `UTR${referenceId.slice(-8)}`,
+      }),
+      refundPayment: async () => ({ id: "rfnd_mock" }),
+    });
     memoryMongo = await MongoMemoryServer.create();
     await mongoose.connect(memoryMongo.getUri());
     await mongoose.connection.db?.dropDatabase();
@@ -44,6 +54,7 @@ describe("Razorpay integration", () => {
   });
 
   afterAll(async () => {
+    setPayoutApiForTests(null);
     await mongoose.disconnect();
     await memoryMongo.stop();
   });
@@ -125,7 +136,64 @@ describe("Razorpay integration", () => {
     expect(verifyPaymentSignature(orderId, paymentId, "bad", keySecret)).toBe(false);
   });
 
-  it("confirm endpoint updates transaction to payment_processing", async () => {
+  it("confirms as captured when RazorpayX is not configured", async () => {
+    const previousAccount = process.env.RAZORPAYX_ACCOUNT_NUMBER;
+    delete process.env.RAZORPAYX_ACCOUNT_NUMBER;
+    const order = await createRazorpayOrder({
+      txId: "TXN-CONF-NOX",
+      amount: 15,
+      employeeId: "EMP-1000",
+      employeeName: "Employee 1",
+      department: "Engineering",
+      merchant: { vpa: "shop@paytm", name: "Shop", category: "office", mcc: "5999" },
+    });
+    const paymentId = "pay_confirm_nox";
+    const signature = crypto
+      .createHmac("sha256", keySecret)
+      .update(`${order.orderId}|${paymentId}`)
+      .digest("hex");
+    const tx = await confirmRazorpayPayment({
+      txId: "TXN-CONF-NOX",
+      razorpay_order_id: order.orderId,
+      razorpay_payment_id: paymentId,
+      razorpay_signature: signature,
+    });
+    expect(tx.paymentStatus).toBe("payment_captured");
+    expect(tx.hasMatchingAllpayRecord).toBe(true);
+    process.env.RAZORPAYX_ACCOUNT_NUMBER = previousAccount;
+  });
+
+  it("pays the shop after RazorpayX account number is added later", async () => {
+    const previousAccount = process.env.RAZORPAYX_ACCOUNT_NUMBER;
+    delete process.env.RAZORPAYX_ACCOUNT_NUMBER;
+    const order = await createRazorpayOrder({
+      txId: "TXN-CONF-LATER-X",
+      amount: 18,
+      employeeId: "EMP-1000",
+      employeeName: "Employee 1",
+      department: "Engineering",
+      merchant: { vpa: "later@paytm", name: "Later Shop", category: "office", mcc: "5999" },
+    });
+    const paymentId = "pay_later_x";
+    const signature = crypto
+      .createHmac("sha256", keySecret)
+      .update(`${order.orderId}|${paymentId}`)
+      .digest("hex");
+    const captured = await confirmRazorpayPayment({
+      txId: "TXN-CONF-LATER-X",
+      razorpay_order_id: order.orderId,
+      razorpay_payment_id: paymentId,
+      razorpay_signature: signature,
+    });
+    expect(captured.paymentStatus).toBe("payment_captured");
+
+    process.env.RAZORPAYX_ACCOUNT_NUMBER = previousAccount || "2323230003046";
+    const paid = await settleMerchantPayout("TXN-CONF-LATER-X");
+    expect(paid?.paymentStatus).toBe("payout_processed");
+    expect(paid?.razorpayPayoutId).toBeTruthy();
+  });
+
+  it("confirm with RazorpayX pays the shop immediately", async () => {
     const order = await createRazorpayOrder({
       txId: "TXN-CONF-1",
       amount: 10,
@@ -146,10 +214,25 @@ describe("Razorpay integration", () => {
       razorpay_payment_id: paymentId,
       razorpay_signature: signature,
     });
-    expect(tx.paymentStatus).toBe("payment_processing");
+    expect(tx.paymentStatus).toBe("payout_processed");
+    expect(tx.hasMatchingAllpayRecord).toBe(true);
+    expect(tx.razorpayPayoutId).toBeTruthy();
   });
 
-  it("webhook payment.captured sets payment_captured", async () => {
+  it("rejects personal UPI IDs", async () => {
+    const res = await request(app)
+      .post("/api/mobile/payments/create-order")
+      .send({
+        txId: "TXN-RZP-P2P",
+        amount: 100,
+        employeeId: "EMP-1000",
+        merchant: { vpa: "friend@oksbi", name: "Friend", category: "other", mcc: "0000" },
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/merchant \/ shop/i);
+  });
+
+  it("webhook payment.captured pays the shop and marks payout_processed", async () => {
     const order = await createRazorpayOrder({
       txId: "TXN-WH-1",
       amount: 20,
@@ -176,7 +259,10 @@ describe("Razorpay integration", () => {
     expect(result.ok).toBe(true);
 
     const tx = await Transaction.findOne({ id: "TXN-WH-1" }).exec();
-    expect(tx?.paymentStatus).toBe("payment_captured");
+    expect(tx?.paymentStatus).toBe("payout_processed");
+    expect(tx?.hasMatchingAllpayRecord).toBe(true);
+    expect(tx?.razorpayPayoutId).toMatch(/^pout_/);
+    expect(tx?.payoutUtr).toBeTruthy();
   });
 
   it("duplicate webhook event is idempotent", async () => {
@@ -208,6 +294,50 @@ describe("Razorpay integration", () => {
     expect(first.ok).toBe(true);
     expect(second.ok).toBe(true);
     expect(second.duplicate).toBe(true);
+  });
+
+  it("refunds the employee when shop payout fails", async () => {
+    setPayoutApiForTests({
+      createVpaPayout: async () => {
+        throw new Error("Insufficient RazorpayX balance");
+      },
+      refundPayment: async () => ({ id: "rfnd_fail_1" }),
+    });
+    const order = await createRazorpayOrder({
+      txId: "TXN-WH-REFUND",
+      amount: 30,
+      employeeId: "EMP-1000",
+      employeeName: "Employee 1",
+      department: "Engineering",
+      merchant: { vpa: "shop@paytm", name: "Shop", category: "office", mcc: "5999" },
+    });
+    const payload = JSON.stringify({
+      event: "payment.captured",
+      id: "evt_refund_1",
+      payload: {
+        payment: {
+          entity: {
+            id: "pay_refund_1",
+            order_id: order.orderId,
+            amount: 3000,
+          },
+        },
+      },
+    });
+    const signature = crypto.createHmac("sha256", webhookSecret).update(payload).digest("hex");
+    await handleRazorpayWebhookEvent(payload, signature, "evt_refund_1");
+    const tx = await Transaction.findOne({ id: "TXN-WH-REFUND" }).exec();
+    expect(tx?.paymentStatus).toBe("refunded");
+    expect(tx?.refundId).toBe("rfnd_fail_1");
+    expect(tx?.hasMatchingAllpayRecord).toBe(false);
+    setPayoutApiForTests({
+      createVpaPayout: async ({ referenceId }) => ({
+        id: `pout_${referenceId}`,
+        status: "processed",
+        utr: `UTR${referenceId.slice(-8)}`,
+      }),
+      refundPayment: async () => ({ id: "rfnd_mock" }),
+    });
   });
 
   it("rejects invalid webhook signature", async () => {

@@ -13,7 +13,7 @@ import {
   ViewToken,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {colors, motion, radius, shadow} from '../../theme/tokens';
+import {colors, motion, radius} from '../../theme/tokens';
 import {
   ExpenseTrackingVisual,
   PaymentFlowVisual,
@@ -37,8 +37,8 @@ const SLIDES: Slide[] = [
   },
   {
     id: 'scan',
-    headline: 'Scan and pay\nwith your UPI app.',
-    supporting: 'AllPay opens PhonePe, GPay, Paytm, or BHIM — it does not settle the bank payment.',
+    headline: 'Scan a shop QR.\nAllPay pays the merchant.',
+    supporting: 'You pay AllPay via Razorpay. AllPay then pays the shop instantly.',
   },
   {
     id: 'organize',
@@ -284,6 +284,7 @@ function OnboardingNextButton({
       accessibilityLabel={isLast ? 'Get started' : 'Next'}
       disabled={disabled}
       onPress={onPress}
+      android_ripple={{color: 'rgba(255,255,255,0.22)', borderless: true, radius: 26}}
       style={({pressed}) => [
         styles.nextBtn,
         pressed ? styles.nextPressed : null,
@@ -407,11 +408,11 @@ const styles = StyleSheet.create({
   nextBtn: {
     width: 52,
     height: 52,
-    borderRadius: 26,
+    borderRadius: 999,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadow.soft,
+    overflow: 'hidden',
   },
   nextPressed: {
     opacity: 0.88,

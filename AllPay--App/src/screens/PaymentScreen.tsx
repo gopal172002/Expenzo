@@ -1,7 +1,8 @@
 import {RouteProp, useNavigation, useRoute} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import React, {useState} from 'react';
-import {Alert, Platform, ScrollView, StyleSheet, Text} from 'react-native';
+import {Alert, ScrollView, StyleSheet} from 'react-native';
+import RazorpayCheckout from 'react-native-razorpay';
 import {COMPANY_AMOUNT_LIMIT} from '../constants/mockData';
 import {
   AppTextInput,
@@ -18,54 +19,20 @@ import {RootStackParamList} from '../navigation';
 import {colors, spacing} from '../theme/tokens';
 import {getPolicyWarningFromPolicies} from '../utils/policies';
 import {toast} from '../utils/toast';
-import {trackUpiEvent} from '../upi/analytics';
 import {isSaneAmountPaise, paiseToRupeeLabel, parseRupeeInputToPaise} from '../upi/money';
-import {buildUpiPayUri, isPersonalP2pPayment} from '../upi/scanner/UpiQrParser';
+import {isPersonalP2pPayment} from '../upi/scanner/UpiQrParser';
+import {createUuid} from '../upi/id';
+import {capturePaymentLocationSnapshot} from '../services/locationSnapshot';
 import {
-  detectIosPaymentUpiApps,
-  hasCompatibleUpiApp,
-  launchUpiIntent,
-} from '../upi/payment/UpiPaymentLauncher';
-import {detectInstalledUpiApps} from '../services/upiApps';
-import {
-  mapUpiResultToStatus,
-  parseUpiPaymentResult,
-} from '../upi/payment/UpiPaymentResultParser';
+  confirmMerchantPayment,
+  createMerchantOrder,
+  markMerchantCheckoutOpened,
+  waitForShopPayout,
+} from '../services/razorpayMerchantPay';
+import type {Transaction} from '../types';
 
 type Route = RouteProp<RootStackParamList, 'Payment'>;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
-
-function pickUpiApp(
-  apps: Array<{id: string; name: string}>,
-  preferredId: string | null,
-): Promise<string | null> {
-  if (apps.length === 0) {
-    return Promise.resolve(null);
-  }
-  if (apps.length === 1) {
-    return Promise.resolve(apps[0].id);
-  }
-  return new Promise(resolve => {
-    const preferred = preferredId
-      ? apps.find(app => app.id === preferredId)
-      : undefined;
-    const ordered = preferred
-      ? [preferred, ...apps.filter(app => app.id !== preferred.id)]
-      : apps;
-    Alert.alert(
-      'Pay with',
-      'Choose a UPI app. For personal UPI IDs, PhonePe or Google Pay often work when Paytm is blocked.',
-      [
-        ...ordered.map(app => ({
-          text: app.name,
-          onPress: () => resolve(app.id),
-        })),
-        {text: 'Cancel', style: 'cancel' as const, onPress: () => resolve(null)},
-      ],
-      {cancelable: true, onDismiss: () => resolve(null)},
-    );
-  });
-}
 
 export const PaymentScreen = () => {
   const navigation = useNavigation<Nav>();
@@ -75,12 +42,9 @@ export const PaymentScreen = () => {
     profile,
     policies,
     transactions,
-    defaultUpiAppId,
     locationEnabled,
-    installedUpiApps,
-    createUpiPayment,
-    markUpiAppOpened,
-    applyUpiPaymentStatus,
+    upsertTransaction,
+    patchTransaction,
   } = useAppData();
 
   const qrLockedPaise = merchant.amountPaise;
@@ -96,158 +60,129 @@ export const PaymentScreen = () => {
     baseSanitizedUri: merchant.sanitizedUri,
   });
 
-  const defaultAppName =
-    installedUpiApps.find(a => a.id === defaultUpiAppId)?.name ?? 'your UPI app';
-
   const continuePayment = async (parsedPaise: number) => {
     if (paying || !profile) {
       return;
     }
+    if (personalP2p) {
+      toast.error(
+        'Personal UPI not supported',
+        'AllPay only pays merchant / shop QRs. Ask for a business QR.',
+      );
+      return;
+    }
+
     setPaying(true);
+    const txId = createUuid();
+    const amountRupees = Number(paiseToRupeeLabel(parsedPaise));
     try {
-      setStatusMessage('Saving payment...');
-      const payment = await createUpiPayment({
-        payeeVpa: merchant.vpa,
-        payeeName: merchant.name,
-        amountPaise: parsedPaise,
-        note: merchant.note,
-        category: merchant.category,
-        mcc: merchant.mcc,
-      });
-      trackUpiEvent('upi_payment_confirmed');
-
-      const uri = buildUpiPayUri({
-        payeeVpa: merchant.vpa,
-        payeeName: merchant.name,
-        amountPaise: parsedPaise,
-        note: merchant.note,
-        merchantTransactionRef: merchant.qrTransactionRef,
-        merchantCategoryCode: merchant.merchantCategoryCode,
-        baseSanitizedUri: merchant.sanitizedUri,
+      setStatusMessage('Creating payment to AllPay...');
+      const order = await createMerchantOrder({
+        txId,
+        amount: amountRupees,
+        employeeId: profile.employeeId,
+        merchant: {
+          vpa: merchant.vpa,
+          name: merchant.name,
+          category: merchant.category,
+          mcc: merchant.mcc || merchant.merchantCategoryCode || '',
+          ...(merchant.amount != null ? {amount: merchant.amount} : {}),
+        },
       });
 
-      const hasApp = await hasCompatibleUpiApp(uri);
-      if (!hasApp) {
-        await applyUpiPaymentStatus(payment.id, 'CANCELLED');
-        toast.error(
-          'No UPI app',
-          'Install Google Pay, PhonePe, Paytm, or BHIM, then try again.',
-        );
-        navigation.replace('PaymentResult', {paymentId: payment.id});
-        return;
+      const draft: Transaction = {
+        id: txId,
+        employeeId: profile.employeeId,
+        merchant,
+        amount: amountRupees,
+        amountPaise: parsedPaise,
+        timestamp: new Date().toISOString(),
+        upiApp: 'Razorpay',
+        status: 'Recorded',
+        syncStatus: 'queued',
+        receipts: [],
+        location: null,
+        paymentStatus: 'order_created',
+        razorpayOrderId: order.orderId,
+        orderAmountPaise: order.amount,
+        paymentMethod: 'razorpay_merchant_payout',
+        expenseSource: 'ALLPAY_MERCHANT_PAYOUT',
+      };
+      await upsertTransaction(draft);
+
+      await markMerchantCheckoutOpened(txId);
+      setStatusMessage('Open Razorpay to pay AllPay...');
+      const checkout = await RazorpayCheckout.open({
+        key: order.keyId,
+        amount: String(order.amount),
+        currency: order.currency,
+        name: 'AllPay',
+        description: `Pay ${merchant.name}`,
+        order_id: order.orderId,
+        prefill: {
+          name: profile.employeeName,
+          contact: profile.mobile,
+        },
+        theme: {color: colors.navy},
+      });
+
+      const snapshot = await capturePaymentLocationSnapshot(locationEnabled);
+      setStatusMessage('Confirming payment...');
+      await confirmMerchantPayment({
+        txId,
+        razorpay_order_id: checkout.razorpay_order_id,
+        razorpay_payment_id: checkout.razorpay_payment_id,
+        razorpay_signature: checkout.razorpay_signature,
+        location: snapshot.location,
+      });
+      await patchTransaction(txId, {
+        paymentStatus: 'payment_processing',
+        razorpayPaymentId: checkout.razorpay_payment_id,
+        location: snapshot.location,
+      });
+
+      setStatusMessage(
+        order.shopPayoutEnabled
+          ? 'Paying the shop from AllPay...'
+          : 'Confirming payment with AllPay...',
+      );
+      const settled = await waitForShopPayout(txId, 45000, order.shopPayoutEnabled);
+      const collected =
+        settled.paymentStatus === 'payout_processed' ||
+        settled.paymentStatus === 'payment_captured';
+      await patchTransaction(txId, {
+        paymentStatus: settled.paymentStatus as Transaction['paymentStatus'],
+        razorpayPaymentId: settled.razorpayPaymentId ?? checkout.razorpay_payment_id,
+        upiRefId: settled.payoutUtr ?? checkout.razorpay_payment_id,
+        paymentFailedReason: settled.payoutFailedReason ?? undefined,
+        paymentConfirmedAt: new Date().toISOString(),
+        syncStatus: collected ? 'synced' : 'queued',
+      });
+
+      if (settled.paymentStatus === 'payout_processed') {
+        toast.info('Shop paid', 'AllPay received your payment and paid the merchant.');
+      } else if (settled.paymentStatus === 'payment_captured') {
+        toast.info('Payment received', 'AllPay recorded your Razorpay payment.');
+      } else if (settled.paymentStatus === 'refunded') {
+        toast.error('Shop payout failed', 'Your payment to AllPay was refunded.');
+      } else if (settled.payoutFailedReason) {
+        toast.error('Shop payout pending', settled.payoutFailedReason);
       }
 
-      let preferredAppId = defaultUpiAppId;
-      const installedApps =
-        Platform.OS === 'ios'
-          ? await detectIosPaymentUpiApps()
-          : (await detectInstalledUpiApps()).map(app => ({id: app.id, name: app.name}));
-
-      if (installedApps.length === 0) {
-        await applyUpiPaymentStatus(payment.id, 'CANCELLED');
-        toast.error(
-          'No UPI app',
-          'Install Google Pay, PhonePe, Paytm, or BHIM, then try again.',
-        );
-        navigation.replace('PaymentResult', {paymentId: payment.id});
-        return;
-      }
-
-      const defaultAvailable =
-        defaultUpiAppId && installedApps.some(app => app.id === defaultUpiAppId);
-      if (defaultAvailable) {
-        preferredAppId = defaultUpiAppId;
-      } else if (installedApps.some(app => app.id === 'paytm')) {
-        preferredAppId = 'paytm';
-      } else if (installedApps.length > 1) {
-        const chosen = await pickUpiApp(installedApps, defaultUpiAppId);
-        if (!chosen) {
-          await applyUpiPaymentStatus(payment.id, 'CANCELLED');
-          trackUpiEvent('upi_result_cancelled');
-          navigation.replace('PaymentResult', {paymentId: payment.id});
-          return;
-        }
-        preferredAppId = chosen;
+      navigation.replace('PaymentResult', {paymentId: txId});
+    } catch (error) {
+      const message = (error as Error).message || 'Payment cancelled';
+      if (/cancelled|backpressed|user/i.test(message)) {
+        toast.info('Payment cancelled', 'No money was taken.');
+        await patchTransaction(txId, {paymentStatus: 'payment_abandoned'});
       } else {
-        preferredAppId = installedApps[0].id;
-      }
-
-      if (personalP2p && Platform.OS === 'ios') {
-        await markUpiAppOpened(payment.id);
-        trackUpiEvent('upi_app_launched');
-        navigation.replace('PaymentQrPay', {
-          paymentId: payment.id,
-          upiUri: uri,
-          preferredAppId: preferredAppId ?? 'paytm',
+        toast.error('Payment failed', message);
+        await patchTransaction(txId, {
+          paymentStatus: 'payment_failed',
+          paymentFailedReason: message,
         });
-        return;
       }
-
-      await markUpiAppOpened(payment.id);
-      setStatusMessage('Opening UPI app...');
-      trackUpiEvent('upi_app_launched');
-      const launch = await launchUpiIntent(uri, {preferredAppId, personalP2p});
-
-      if (launch.kind === 'no_app') {
-        await applyUpiPaymentStatus(payment.id, 'CANCELLED');
-        toast.error(
-          'No UPI app',
-          'Install Google Pay, PhonePe, Paytm, or BHIM, then try again.',
-        );
-      } else if (launch.kind === 'cancelled') {
-        await applyUpiPaymentStatus(payment.id, 'CANCELLED');
-        trackUpiEvent('upi_result_cancelled');
-      } else if (launch.kind === 'unsupported') {
-        await applyUpiPaymentStatus(payment.id, 'UNKNOWN');
-      } else if (launch.kind === 'opened') {
-        trackUpiEvent('upi_result_unknown');
-        if (personalP2p) {
-          toast.info(
-            'Complete payment in UPI app',
-            'If SBI shows risk policy after PIN, return and use Scan to pay.',
-          );
-        } else {
-          toast.info(
-            'Complete payment in UPI app',
-            'After PIN, return here if status is unknown.',
-          );
-        }
-      } else {
-        const parsed = parseUpiPaymentResult(launch.raw);
-        const mapped = mapUpiResultToStatus(parsed, merchant.qrTransactionRef);
-        await applyUpiPaymentStatus(payment.id, mapped, {
-          upiTxnId: parsed.transactionId ?? undefined,
-          upiTxnRef: parsed.transactionReference ?? undefined,
-          approvalRefNo: parsed.approvalReference ?? undefined,
-          upiResponseCode: parsed.responseCode ?? undefined,
-        });
-        if (mapped === 'SUCCESS_REPORTED') {
-          trackUpiEvent('upi_result_success');
-        } else if (mapped === 'FAILED') {
-          trackUpiEvent('upi_result_failed');
-          if (personalP2p) {
-            toast.error(
-              'Bank declined auto-pay',
-              'SBI often blocks third-party UPI intents to personal IDs. Scan the payment QR in Paytm instead.',
-            );
-            navigation.replace('PaymentQrPay', {
-              paymentId: payment.id,
-              upiUri: uri,
-              preferredAppId: preferredAppId ?? 'paytm',
-            });
-            return;
-          }
-          toast.error(
-            'UPI app reported failure',
-            'Try Google Pay or PhonePe, or a shop merchant QR.',
-          );
-        } else if (mapped === 'PENDING') {
-          trackUpiEvent('upi_result_pending');
-        } else {
-          trackUpiEvent('upi_result_unknown');
-        }
-      }
-      navigation.replace('PaymentResult', {paymentId: payment.id});
+      navigation.replace('PaymentResult', {paymentId: txId});
     } finally {
       setPaying(false);
       setStatusMessage(null);
@@ -255,6 +190,13 @@ export const PaymentScreen = () => {
   };
 
   const onConfirm = async () => {
+    if (personalP2p) {
+      Alert.alert(
+        'Personal UPI not supported',
+        'AllPay only records merchant / shop payments. Ask for a business QR with a merchant category.',
+      );
+      return;
+    }
     const parsedPaise =
       qrLockedPaise !== undefined ? qrLockedPaise : parseRupeeInputToPaise(amountText);
     if (parsedPaise === null) {
@@ -299,22 +241,28 @@ export const PaymentScreen = () => {
     qrLockedPaise !== undefined ? qrLockedPaise : parseRupeeInputToPaise(amountText);
   const payLabel =
     displayPaise && isSaneAmountPaise(displayPaise)
-      ? `Pay ₹${paiseToRupeeLabel(displayPaise)} with UPI`
-      : 'Continue to UPI';
+      ? `Pay ₹${paiseToRupeeLabel(displayPaise)} via Razorpay`
+      : 'Continue to Razorpay';
 
   return (
     <Screen safeTop={false}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <ScreenHeader
           eyebrow={profile?.companyName}
-          title="Confirm payment"
-          subtitle="Review details, then AllPay opens your UPI app. Your PIN is entered only in that app."
+          title="Confirm merchant payment"
+          subtitle="You pay AllPay through Razorpay. AllPay then pays this shop instantly."
         />
 
-        <InfoBanner tone="info" title="External UPI payment">
-          AllPay will open {defaultAppName} (or let you choose). Opening the app is not the same as
-          a successful bank payment — the result is recorded when the UPI app reports it.
+        <InfoBanner tone="info" title="Merchant payment">
+          You pay AllPay through Razorpay. When RazorpayX is connected, AllPay instantly pays this
+          shop’s UPI ID. Until then, AllPay records the captured payment.
         </InfoBanner>
+
+        {personalP2p ? (
+          <InfoBanner tone="warning" title="Personal UPI ID">
+            This QR is a personal account. AllPay only pays merchant / shop QRs.
+          </InfoBanner>
+        ) : null}
 
         {statusMessage ? (
           <InfoBanner tone="warning" title="Working…">
@@ -359,10 +307,8 @@ export const PaymentScreen = () => {
         </Section>
 
         <Section title="Before you pay">
-          <DetailRow
-            label="Selected UPI app"
-            value={defaultUpiAppId ? defaultAppName : 'Choose when paying'}
-          />
+          <DetailRow label="You pay" value="AllPay (Razorpay checkout)" />
+          <DetailRow label="Shop receives" value={merchant.vpa} />
           <DetailRow
             label="Location snapshot"
             value={
@@ -370,24 +316,14 @@ export const PaymentScreen = () => {
                 ? 'Enabled — one-time capture after confirmation'
                 : 'Off — enable in Settings if finance requires it'
             }
-          />
-          <DetailRow
-            label="Payment type"
-            value={personalP2p ? 'Personal UPI ID' : 'Merchant / shop QR'}
             last
           />
-          {personalP2p ? (
-            <Text style={styles.helpText}>
-              Personal UPI: auto-pay may fail on some banks after PIN. If that happens, use Scan to
-              pay inside your UPI app.
-            </Text>
-          ) : null}
         </Section>
 
         <PrimaryButton
-          label={paying ? 'Opening UPI…' : payLabel}
+          label={paying ? 'Processing…' : payLabel}
           onPress={onConfirm}
-          disabled={paying}
+          disabled={paying || personalP2p}
           loading={paying}
         />
         <SecondaryButton label="Cancel" onPress={() => navigation.goBack()} disabled={paying} />
@@ -401,12 +337,6 @@ const styles = StyleSheet.create({
     padding: spacing.page,
     paddingBottom: 24,
     flexGrow: 1,
-  },
-  helpText: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: spacing.sm,
   },
   amountInput: {
     fontSize: 24,

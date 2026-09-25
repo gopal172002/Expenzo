@@ -140,6 +140,12 @@ export interface Transaction {
     capturedAt: string;
   } | null;
   paymentId?: string;
+  merchantVpa?: string;
+  paymentStatus?: string;
+  paymentMethod?: string;
+  payoutUtr?: string;
+  razorpayPayoutId?: string;
+  razorpayPaymentId?: string;
 }
 
 export interface ExpensePolicy {

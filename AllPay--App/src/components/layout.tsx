@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -19,6 +20,8 @@ import {
   spacing,
   typography,
 } from '../theme/tokens';
+
+const brandLogo = require('../assets/brand/app-logo.png');
 
 type ScreenProps = {
   children: React.ReactNode;
@@ -56,20 +59,14 @@ export const AppLogo = ({
   showWordmark?: boolean;
 }) => {
   const dim = size === 'sm' ? 36 : size === 'lg' ? 64 : 48;
-  const fontSize = size === 'sm' ? 13 : size === 'lg' ? 22 : 16;
+  const corner = size === 'lg' ? radius.lg : radius.md;
   return (
     <View style={styles.logoRow} accessibilityRole="image" accessibilityLabel="AllPay">
-      <View
-        style={[
-          styles.logoMark,
-          {
-            width: dim,
-            height: dim,
-            borderRadius: size === 'lg' ? radius.lg : radius.md,
-          },
-        ]}>
-        <Text style={[styles.logoMarkText, {fontSize}]}>AP</Text>
-      </View>
+      <Image
+        source={brandLogo}
+        style={{width: dim, height: dim, borderRadius: corner}}
+        resizeMode="cover"
+      />
       {showWordmark ? (
         <View>
           <Text style={styles.logoWord}>AllPay</Text>
@@ -345,13 +342,6 @@ const styles = StyleSheet.create({
   screen: {flex: 1, backgroundColor: colors.page},
   flexOne: {flex: 1, minWidth: 0},
   logoRow: {flexDirection: 'row', alignItems: 'center', gap: spacing.md},
-  logoMark: {
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadow.soft,
-  },
-  logoMarkText: {color: colors.textInverse, fontWeight: '800'},
   logoWord: {...typography.titleSm, color: colors.navy},
   logoTag: {...typography.caption, color: colors.textSecondary, marginTop: 1},
   brandHeader: {marginBottom: spacing.xl},

@@ -12,6 +12,11 @@ const SERVER_OWNED_PAYMENT_FIELDS = [
   "paymentFailedReason",
   "paymentConfirmedAt",
   "razorpayWebhookEventIds",
+  "razorpayPayoutId",
+  "payoutUtr",
+  "payoutFailedReason",
+  "payoutProcessedAt",
+  "refundId",
   "paymentId",
   "amountPaise",
   "upiTxnRef",
@@ -37,6 +42,7 @@ export function mergeMobileSyncFields(
   const safe = stripServerOwnedPaymentFields(incoming);
 
   if (
+    existing.paymentStatus === "payout_processed" ||
     existing.paymentStatus === "payment_captured" ||
     existing.paymentStatus === "SUCCESS_REPORTED"
   ) {
@@ -50,6 +56,7 @@ export function mergeMobileSyncFields(
 export function canSubmitReimbursement(paymentStatus: PaymentStatus | string | undefined): boolean {
   return (
     isPaymentCaptured(paymentStatus as PaymentStatus | undefined) ||
+    paymentStatus === "payout_processed" ||
     paymentStatus === "SUCCESS_REPORTED" ||
     paymentStatus === "USER_CONFIRMED"
   );

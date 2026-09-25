@@ -183,7 +183,16 @@ export const TransactionDetailScreen = () => {
                 : `INR ${tx.amount.toFixed(2)}`
             }
           />
-          <DetailRow label="Method" value={tx.paymentMethod === 'UPI_INTENT' ? 'UPI' : tx.upiApp} />
+          <DetailRow
+            label="Method"
+            value={
+              tx.paymentMethod === 'razorpay_merchant_payout'
+                ? 'Razorpay → shop payout'
+                : tx.paymentMethod === 'UPI_INTENT'
+                  ? 'UPI'
+                  : tx.upiApp
+            }
+          />
           <DetailRow label="Payment status" value={tx.paymentStatus ?? 'Not started'} />
           <DetailRow label="Reference" value={maskRef(tx.upiRefId ?? tx.upiTxnRef)} />
           <DetailRow label="Sync" value={tx.syncStatus} />
@@ -196,10 +205,9 @@ export const TransactionDetailScreen = () => {
             }
             last
           />
-          {tx.paymentMethod === 'UPI_INTENT' ? (
+          {tx.paymentMethod === 'razorpay_merchant_payout' ? (
             <Text style={styles.helpText}>
-              SUCCESS_REPORTED means the UPI app returned success. AllPay did not independently
-              verify settlement with the bank.
+              You paid AllPay via Razorpay. Shop paid is confirmed only when status is Shop paid.
             </Text>
           ) : null}
           {tx.policyWarning ? (

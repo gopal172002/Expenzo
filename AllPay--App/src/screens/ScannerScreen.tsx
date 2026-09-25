@@ -110,11 +110,22 @@ export const ScannerScreen = () => {
         }
         return;
       }
+      const merchant = merchantFromUpiQr(validated);
+      const personal =
+        !merchant.merchantCategoryCode || merchant.merchantCategoryCode === '0000';
+      if (personal) {
+        handledValue.current = trimmed;
+        toast.error(
+          'Personal UPI not supported',
+          'Scan a merchant / shop QR. AllPay does not pay personal UPI IDs.',
+        );
+        return;
+      }
       trackUpiEvent('upi_qr_scanned');
       handledValue.current = trimmed;
       setScanFlash(true);
       setTimeout(() => setScanFlash(false), 400);
-      navigation.navigate('Payment', {merchant: merchantFromUpiQr(validated)});
+      navigation.navigate('Payment', {merchant});
     },
     [navigation],
   );
@@ -131,12 +142,12 @@ export const ScannerScreen = () => {
         showsVerticalScrollIndicator={false}>
         <ScreenHeader
           title="Scan merchant QR"
-          subtitle="Point the camera at a UPI QR. AllPay opens your UPI app only after you confirm the payment."
+          subtitle="Point the camera at a merchant UPI QR. You pay AllPay via Razorpay; AllPay pays the shop."
         />
 
-        <InfoBanner tone="info" title="External UPI">
-          Scanning does not pay the merchant. After you confirm, AllPay launches PhonePe, Google Pay,
-          Paytm, or BHIM to complete the bank payment.
+        <InfoBanner tone="info" title="Merchant QR only">
+          Scan a shop / business UPI QR. You pay AllPay through Razorpay, then AllPay pays this
+          merchant instantly. Personal UPI IDs are not supported.
         </InfoBanner>
 
         <View style={styles.cameraCard}>

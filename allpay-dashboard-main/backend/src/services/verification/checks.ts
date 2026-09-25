@@ -82,9 +82,10 @@ const SOFT_MOVEMENT_MERCHANT_HINTS = [
 ];
 
 const SUCCESSFUL_PAYMENT_STATUSES = new Set([
+  "payout_processed",
+  "payment_captured",
   "SUCCESS_REPORTED",
   "USER_CONFIRMED",
-  "payment_captured",
 ]);
 
 function paise(amount: number): number {

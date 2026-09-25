@@ -4,7 +4,7 @@ import {API_BASE_URL, MOBILE_SYNC_SECRET, USE_LOCAL_API} from '@env';
 function normalizeApiBase(raw: string | undefined): string {
   const base = String(raw ?? '').trim().replace(/\/$/, '');
   if (!base) {
-    return 'https://allpay-dashboard.onrender.com/api';
+    return 'https://expenzo-gchd.onrender.com/api';
   }
   if (/^https?:\/\/[^/?#]+(?::\d+)?$/i.test(base)) {
     return `${base}/api`;

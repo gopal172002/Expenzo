@@ -31,7 +31,8 @@ import {
 } from "./services/adminAccessService";
 import { registerEmployeeRoutes } from "./employeeRoutes";
 import { registerMobileOnboardingRoutes } from "./mobileOnboardingRoutes";
-import { registerUpiIntentRoutes } from "./upiIntentRoutes";
+import { settleMerchantPayout } from "./services/razorpayPayoutService";
+import { MerchantPayeeError } from "./services/merchantPayee";
 import {
   getDefaultBootstrapTxLimit,
   parseTransactionQuery
@@ -70,7 +71,7 @@ import {
   createRazorpayOrder,
   markCheckoutOpened
 } from "./services/razorpayService";
-import { type PaymentStatus } from "./services/razorpayConfig";
+import { isShopPayoutEnabled, type PaymentStatus } from "./services/razorpayConfig";
 import {
   employeeIdIsAssigned,
   findActiveEmployeeByEmail,
@@ -697,7 +698,6 @@ router.post("/auth/login", async (req, res) => {
 
 // --- MOBILE (AllpayEmployeeApp) — onboarding + sync ---
 registerMobileOnboardingRoutes(router);
-registerUpiIntentRoutes(router);
 
 router.post("/mobile/auth/employee-token", async (req, res) => {
   try {
@@ -838,7 +838,7 @@ router.post("/mobile/payments/create-order", mobileDeviceAuth, async (req: Mobil
         vpa: body.merchant.vpa,
         name: body.merchant.name ?? "Unknown",
         category: body.merchant.category ?? "office",
-        mcc: body.merchant.mcc ?? "5999",
+        mcc: body.merchant.mcc ?? "",
         ...(body.merchant.amount != null ? { amount: body.merchant.amount } : {}),
       },
       ...(body.upiApp?.trim() ? { upiApp: body.upiApp.trim() } : {}),
@@ -847,6 +847,9 @@ router.post("/mobile/payments/create-order", mobileDeviceAuth, async (req: Mobil
     res.json({ ok: true, ...result });
   } catch (error) {
     const statusCode = (error as Error & { statusCode?: number }).statusCode;
+    if (error instanceof MerchantPayeeError || statusCode === 400) {
+      return res.status(400).json({ ok: false, message: (error as Error).message });
+    }
     if (statusCode === 409) {
       return res.status(409).json({ ok: false, message: (error as Error).message });
     }
@@ -894,6 +897,9 @@ router.post("/mobile/payments/confirm", mobileDeviceAuth, async (req: MobileRequ
       ok: true,
       paymentStatus: tx.paymentStatus,
       razorpayPaymentId: tx.razorpayPaymentId,
+      razorpayPayoutId: tx.razorpayPayoutId ?? null,
+      payoutUtr: tx.payoutUtr ?? null,
+      shopPayoutEnabled: isShopPayoutEnabled(),
       latitude: tx.latitude ?? null,
       longitude: tx.longitude ?? null,
       locationCapturedAt: tx.locationCapturedAt ?? null,
@@ -942,12 +948,18 @@ router.get("/mobile/transactions/:id/payment-status", mobileDeviceAuth, async (r
     if (req.mobileEmployeeId && req.mobileEmployeeId !== tx.employeeId) {
       return res.status(403).json({ ok: false, message: "Not allowed" });
     }
+    await settleMerchantPayout(tx.id);
+    const latest = (await Transaction.findOne(txQuery).exec()) ?? tx;
     res.json({
       ok: true,
-      paymentStatus: tx.paymentStatus ?? "draft",
-      razorpayPaymentId: tx.razorpayPaymentId ?? null,
-      razorpayOrderId: tx.razorpayOrderId ?? null,
-      expenseStatus: tx.status
+      paymentStatus: latest.paymentStatus ?? "draft",
+      razorpayPaymentId: latest.razorpayPaymentId ?? null,
+      razorpayOrderId: latest.razorpayOrderId ?? null,
+      razorpayPayoutId: latest.razorpayPayoutId ?? null,
+      payoutUtr: latest.payoutUtr ?? null,
+      payoutFailedReason: latest.payoutFailedReason ?? null,
+      shopPayoutEnabled: isShopPayoutEnabled(),
+      expenseStatus: latest.status
     });
   } catch (error) {
     res.status(500).json({ ok: false, message: (error as Error).message });

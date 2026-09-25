@@ -10,6 +10,8 @@ export const colors = {
   primarySoft: '#EFF6FF',
   primaryBorder: '#BFDBFE',
   primaryMuted: '#DBEAFE',
+  brandGradientStart: '#1E60D5',
+  brandGradientEnd: '#0B1C3F',
 
   // Deep navy / indigo for headings
   navy: '#0F172A',
@@ -247,6 +249,26 @@ export const paymentStatusLabel = (status: string): string => {
       return 'Cancelled';
     case 'UNKNOWN':
       return 'Unknown';
+    case 'payout_processed':
+      return 'Shop paid';
+    case 'payout_initiated':
+      return 'Paying shop';
+    case 'payout_failed':
+      return 'Shop payout failed';
+    case 'refunded':
+      return 'Refunded';
+    case 'refund_initiated':
+      return 'Refund started';
+    case 'payment_captured':
+      return 'Received by AllPay';
+    case 'payment_processing':
+      return 'Confirming';
+    case 'order_created':
+      return 'Order created';
+    case 'payment_abandoned':
+      return 'Cancelled';
+    case 'payment_failed':
+      return 'Payment failed';
     default:
       return status;
   }
@@ -258,6 +280,7 @@ export const statusTone = (
   if (
     status === 'Approved' ||
     status === 'SUCCESS_REPORTED' ||
+    status === 'payout_processed' ||
     status === 'synced' ||
     status === 'Recorded'
   ) {
@@ -267,7 +290,11 @@ export const statusTone = (
     status === 'Rejected' ||
     status === 'Abandoned' ||
     status === 'FAILED' ||
-    status === 'CANCELLED'
+    status === 'CANCELLED' ||
+    status === 'payout_failed' ||
+    status === 'refunded' ||
+    status === 'payment_failed' ||
+    status === 'payment_abandoned'
   ) {
     return {bg: colors.dangerSoft, fg: colors.dangerText, border: colors.dangerBorder};
   }
@@ -279,6 +306,9 @@ export const statusTone = (
     status === 'USER_CONFIRMED' ||
     status === 'INITIATED' ||
     status === 'UPI_APP_OPENED' ||
+    status === 'payout_initiated' ||
+    status === 'payment_processing' ||
+    status === 'payment_captured' ||
     status === 'queued'
   ) {
     return {bg: colors.warningSoft, fg: colors.warningText, border: colors.warningBorder};

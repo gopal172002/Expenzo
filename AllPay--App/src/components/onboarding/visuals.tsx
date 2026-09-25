@@ -113,7 +113,7 @@ export function PaymentFlowVisual() {
             </View>
           ))}
         </View>
-        <Text style={styles.cardTitle}>Pay in your UPI app</Text>
+        <Text style={styles.cardTitle}>Pay the shop via AllPay</Text>
         <MetaRow label="PhonePe · GPay · BHIM" sub="secure" />
       </FloatCard>
     </View>
