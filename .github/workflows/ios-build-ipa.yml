@@ -1,0 +1,93 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'AllPay--App/**'
+      - '.github/workflows/ios-build-ipa.yml'
+
+jobs:
+  build-ipa:
+    name: Build AllPay Employee IPA
+    runs-on: macos-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: AllPay--App
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: AllPay--App/package-lock.json
+
+      - name: Write production env
+        run: |
+          printf '%s\n' \
+            'API_BASE_URL=https://expenzo-gchd.onrender.com/api' \
+            'USE_LOCAL_API=false' \
+            'MOBILE_SYNC_SECRET=' \
+            > .env
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Install CocoaPods
+        env:
+          RCT_NEW_ARCH_ENABLED: '0'
+        run: |
+          gem install cocoapods -v 1.16.2 --no-document
+          cd ios
+          pod install --repo-update
+
+      - name: Build release archive (unsigned)
+        env:
+          RCT_NEW_ARCH_ENABLED: '0'
+        run: |
+          cd ios
+          xcodebuild \
+            -workspace AllpayEmployeeApp.xcworkspace \
+            -scheme AllpayEmployeeApp \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$PWD/build/AllpayEmployeeApp.xcarchive" \
+            archive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            PROVISIONING_PROFILE_SPECIFIER=""
+
+      - name: Package IPA
+        run: |
+          APP_PATH="ios/build/AllpayEmployeeApp.xcarchive/Products/Applications/AllpayEmployeeApp.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "Expected app bundle was not found at $APP_PATH"
+            exit 1
+          fi
+          rm -rf ios/Payload ios/AllPay-Employee-release.ipa
+          mkdir ios/Payload
+          cp -R "$APP_PATH" ios/Payload/
+          (cd ios && zip -qr AllPay-Employee-release.ipa Payload)
+          rm -rf ios/Payload
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AllPay-Employee-iOS
+          path: AllPay--App/ios/AllPay-Employee-release.ipa
+          retention-days: 90
+
+      - name: Summary
+        run: |
+          echo "## AllPay iOS build" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Download **AllPay-Employee-iOS** from the workflow **Artifacts** section." >> "$GITHUB_STEP_SUMMARY"
+          echo "Install on iPhone from Windows using **Sideloadly**." >> "$GITHUB_STEP_SUMMARY"
