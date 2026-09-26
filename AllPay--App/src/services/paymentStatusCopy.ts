@@ -60,8 +60,8 @@ export function explainPaymentStatus(
     case 'payment_abandoned':
       return {
         title: 'Checkout closed',
-        hop1: 'Razorpay checkout was closed. AllPay is checking whether that order was already paid.',
-        hop2: 'The shop was not paid unless Razorpay already captured the order.',
+        hop1: 'Razorpay checkout closed. AllPay is checking whether that order was already captured.',
+        hop2: 'The shop is paid only after AllPay payout. A capture on AllPay still counts as paid to AllPay.',
       };
     case 'checkout_opened':
     case 'order_created':

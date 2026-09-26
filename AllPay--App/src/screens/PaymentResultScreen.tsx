@@ -33,7 +33,8 @@ function isFinishedStatus(status: string, shopPayoutEnabled: boolean): boolean {
     status === 'payout_processed' ||
     status === 'refunded' ||
     status === 'payment_failed' ||
-    status === 'payout_failed'
+    status === 'payout_failed' ||
+    status === 'refund_initiated'
   ) {
     return true;
   }
@@ -58,7 +59,7 @@ export const PaymentResultScreen = () => {
     const started = Date.now();
     const tick = async () => {
       setPolling(true);
-      while (!cancelled && Date.now() - started < 20000) {
+      while (!cancelled && Date.now() - started < 45000) {
         try {
           const latest = await fetchMerchantPaymentStatus(paymentId);
           if (cancelled) {
@@ -168,7 +169,7 @@ export const PaymentResultScreen = () => {
 
         {polling ? (
           <InfoBanner tone="warning" title="Checking Razorpay">
-            Confirming whether this order was captured and whether the shop was paid.
+            Confirming whether AllPay already received this payment, then whether the shop was paid.
           </InfoBanner>
         ) : null}
 

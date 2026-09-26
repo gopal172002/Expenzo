@@ -445,20 +445,35 @@ export async function syncCapturedOrderFromRazorpay(txId: string): Promise<ITran
     status === "payout_initiated" ||
     status === "payout_processed" ||
     status === "refunded" ||
-    status === "refund_initiated"
+    status === "refund_initiated" ||
+    status === "payout_failed"
   ) {
     return tx;
   }
 
   try {
     const client = getRazorpayClient();
-    const order = (await client.orders.fetch(tx.razorpayOrderId)) as { status?: string };
-    if (String(order.status) !== "paid") {
+    const [order, payments] = await Promise.all([
+      client.orders.fetch(tx.razorpayOrderId) as Promise<{ status?: string }>,
+      client.orders.fetchPayments(tx.razorpayOrderId),
+    ]);
+    const items = paymentItemsFromOrder(payments);
+    const captured = items.find(
+      (item) => item.status === "captured" || item.status === "authorized"
+    );
+    if (String(order.status) !== "paid" && !captured) {
+      const failed = items.find((item) => item.status === "failed");
+      if (failed && (status === "payment_abandoned" || status === "payment_processing")) {
+        tx.paymentStatus = assertValidPaymentStatus("payment_failed");
+        tx.paymentFailedReason =
+          (typeof failed.error_description === "string" && failed.error_description) ||
+          (typeof failed.error_reason === "string" && failed.error_reason) ||
+          "Payment failed";
+        appendTimeline(tx, "Razorpay payment failed · synced after checkout closed");
+        await tx.save();
+      }
       return tx;
     }
-    const payments = await client.orders.fetchPayments(tx.razorpayOrderId);
-    const items = paymentItemsFromOrder(payments);
-    const captured = items.find((item) => item.status === "captured");
     if (!captured) {
       return tx;
     }

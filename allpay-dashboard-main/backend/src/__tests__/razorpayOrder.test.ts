@@ -420,6 +420,51 @@ describe("Razorpay integration", () => {
     process.env.RAZORPAYX_ACCOUNT_NUMBER = "2323230003046";
   });
 
+  it("syncs a captured payment even when the order is still attempted", async () => {
+    process.env.RAZORPAYX_ACCOUNT_NUMBER = "";
+    const order = await createRazorpayOrder({
+      txId: "TXN-SYNC-ATTEMPTED",
+      amount: 1,
+      employeeId: "EMP-1000",
+      employeeName: "Employee 1",
+      department: "Engineering",
+      merchant: { vpa: "g@paytm", name: "G", category: "office", mcc: "5999" },
+    });
+    razorpayOrderStore.set(order.orderId, {
+      status: "attempted",
+      payment: { id: "pay_stuck_checkout", amount: 100, status: "captured" },
+    });
+
+    const tx = await syncCapturedOrderFromRazorpay("TXN-SYNC-ATTEMPTED");
+    expect(tx?.paymentStatus).toBe("payment_captured");
+    expect(tx?.razorpayPaymentId).toBe("pay_stuck_checkout");
+    process.env.RAZORPAYX_ACCOUNT_NUMBER = "2323230003046";
+  });
+
+  it("marks a failed payment after checkout is abandoned", async () => {
+    process.env.RAZORPAYX_ACCOUNT_NUMBER = "";
+    const order = await createRazorpayOrder({
+      txId: "TXN-SYNC-FAILED",
+      amount: 1,
+      employeeId: "EMP-1000",
+      employeeName: "Employee 1",
+      department: "Engineering",
+      merchant: { vpa: "g@paytm", name: "G", category: "office", mcc: "5999" },
+    });
+    await Transaction.updateOne(
+      { id: "TXN-SYNC-FAILED" },
+      { paymentStatus: "payment_abandoned" }
+    ).exec();
+    razorpayOrderStore.set(order.orderId, {
+      status: "attempted",
+      payment: { id: "pay_failed_1", amount: 100, status: "failed" },
+    });
+
+    const tx = await syncCapturedOrderFromRazorpay("TXN-SYNC-FAILED");
+    expect(tx?.paymentStatus).toBe("payment_failed");
+    process.env.RAZORPAYX_ACCOUNT_NUMBER = "2323230003046";
+  });
+
   it("rejects invalid webhook signature", async () => {
     const res = await request(app)
       .post("/api/webhooks/razorpay")

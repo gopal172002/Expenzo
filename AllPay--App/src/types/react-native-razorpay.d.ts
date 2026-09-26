@@ -7,6 +7,16 @@ declare module 'react-native-razorpay' {
     description?: string;
     order_id: string;
     method?: string;
+    timeout?: number;
+    retry?: {
+      enabled?: boolean;
+      max_count?: number;
+    };
+    modal?: {
+      confirm_close?: boolean;
+      escape?: boolean;
+      backdrop_close?: boolean;
+    };
     prefill?: {
       name?: string;
       contact?: string;
@@ -15,6 +25,7 @@ declare module 'react-native-razorpay' {
     theme?: {
       color?: string;
     };
+    notes?: Record<string, string>;
   };
 
   type RazorpayCheckoutSuccess = {
@@ -25,6 +36,7 @@ declare module 'react-native-razorpay' {
 
   const RazorpayCheckout: {
     open(options: RazorpayCheckoutOptions): Promise<RazorpayCheckoutSuccess>;
+    close?: () => void;
   };
 
   export default RazorpayCheckout;

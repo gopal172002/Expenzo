@@ -1,3 +1,4 @@
+import RazorpayCheckout from 'react-native-razorpay';
 import {authHeaders} from './auth';
 import {API_BASE} from './apiConfig';
 import type {LocationPoint} from '../types';
@@ -164,8 +165,13 @@ export function checkoutErrorMessage(error: unknown): string {
   return 'Payment cancelled';
 }
 
+/** Hop 1 succeeded: money reached AllPay's Razorpay account. Shop payout is hop 2. */
 export function isCollectedPayment(status: string): boolean {
-  return status === 'payout_processed' || status === 'payment_captured';
+  return (
+    status === 'payout_processed' ||
+    status === 'payout_initiated' ||
+    status === 'payment_captured'
+  );
 }
 
 export function isFailedPayment(status: string): boolean {
@@ -175,6 +181,136 @@ export function isFailedPayment(status: string): boolean {
     status === 'payment_failed' ||
     status === 'refund_initiated'
   );
+}
+
+/** Enough to leave Razorpay checkout and show AllPay's result screen. */
+export function isCheckoutSettled(status: string): boolean {
+  return isCollectedPayment(status) || isFailedPayment(status);
+}
+
+export function closeRazorpayCheckout(): void {
+  try {
+    RazorpayCheckout.close?.();
+  } catch {
+    /* react-native-razorpay may not expose close on every platform */
+  }
+}
+
+export type MerchantCheckoutOptions = {
+  key: string;
+  amount: string;
+  currency: string;
+  name: string;
+  description: string;
+  orderId: string;
+  contact?: string;
+  employeeName?: string;
+  themeColor: string;
+};
+
+export function buildMerchantCheckoutOptions(input: MerchantCheckoutOptions) {
+  return {
+    key: input.key,
+    amount: input.amount,
+    currency: input.currency,
+    name: input.name,
+    description: input.description,
+    order_id: input.orderId,
+    timeout: 180,
+    retry: {enabled: false, max_count: 0},
+    modal: {
+      confirm_close: false,
+      escape: true,
+      backdrop_close: false,
+    },
+    prefill: {
+      name: input.employeeName,
+      contact: input.contact,
+      email: 'void@razorpay.com',
+    },
+    theme: {color: input.themeColor},
+  };
+}
+
+export type MerchantCheckoutResult =
+  | {
+      source: 'sdk';
+      checkout: {
+        razorpay_order_id: string;
+        razorpay_payment_id: string;
+        razorpay_signature: string;
+      };
+    }
+  | {source: 'synced'; status: MerchantPaymentStatus};
+
+/**
+ * Open Razorpay, but do not trust its overlay. If AllPay sees a capture
+ * while checkout is stuck on retry, leave and use that status.
+ */
+export function openMerchantCheckout(
+  options: ReturnType<typeof buildMerchantCheckoutOptions>,
+  txId: string,
+): Promise<MerchantCheckoutResult> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let interval: ReturnType<typeof setInterval> | undefined;
+    const firstPollAt = Date.now() + 2500;
+
+    const finish = (result: MerchantCheckoutResult) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (interval) {
+        clearInterval(interval);
+      }
+      resolve(result);
+    };
+
+    const fail = (error: unknown) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (interval) {
+        clearInterval(interval);
+      }
+      reject(error);
+    };
+
+    RazorpayCheckout.open(options)
+      .then(checkout => finish({source: 'sdk', checkout}))
+      .catch(async error => {
+        if (settled) {
+          return;
+        }
+        try {
+          const latest = await fetchMerchantPaymentStatus(txId);
+          if (isCheckoutSettled(latest.paymentStatus)) {
+            finish({source: 'synced', status: latest});
+            return;
+          }
+        } catch {
+          /* use the checkout error */
+        }
+        fail(error);
+      });
+
+    interval = setInterval(() => {
+      if (settled || Date.now() < firstPollAt) {
+        return;
+      }
+      void fetchMerchantPaymentStatus(txId)
+        .then(latest => {
+          if (settled || !isCollectedPayment(latest.paymentStatus)) {
+            return;
+          }
+          closeRazorpayCheckout();
+          finish({source: 'synced', status: latest});
+        })
+        .catch(() => undefined);
+    }, 2000);
+  });
 }
 
 export function sleep(ms: number): Promise<void> {
