@@ -26,25 +26,24 @@ import { AllpayLogo } from "./AllpayLogo";
 import { focusRing, landing } from "./landingTokens";
 
 const productLinks = [
-  { label: "Corporate cards", href: "/#product" },
-  { label: "Expense management", href: "/#product" },
-  { label: "Accounts payable", href: "/#product" },
-  { label: "Business accounts", href: "/#product" },
-  { label: "UPI payments", href: "/#product" },
-  { label: "Accounting sync", href: "/#product" },
+  { label: "UPI expenses", href: "/#product" },
+  { label: "Spend locks", href: "/#controls" },
+  { label: "How tracking works", href: "/#how-it-works" },
+  { label: "Verification", href: "/#verification" },
+  { label: "Reconciliation", href: "/#reconciliation" },
 ];
 
 const solutionLinks = [
-  { label: "Finance teams", href: "/#solutions" },
-  { label: "Founders", href: "/#solutions" },
-  { label: "Operations", href: "/#solutions" },
-  { label: "Employees", href: "/#solutions" },
+  { label: "Business expenses", href: "/#solutions" },
+  { label: "Fleet & fuel", href: "/#solutions" },
+  { label: "Petty cash", href: "/#solutions" },
+  { label: "Reimbursements", href: "/#solutions" },
 ];
 
 const resourceLinks = [
   { label: "How it works", href: "/#how-it-works" },
-  { label: "Security", href: "/#security" },
-  { label: "Customer stories", href: "/#stories" },
+  { label: "Categories", href: "/#categories" },
+  { label: "FAQs", href: "/#faq" },
 ];
 
 const companyLinks = [

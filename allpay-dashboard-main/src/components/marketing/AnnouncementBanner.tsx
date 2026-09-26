@@ -31,7 +31,7 @@ export function AnnouncementBanner() {
               letterSpacing: "0.01em",
             }}
           >
-            Exciting news! UPI payments are now available in India!
+            Business expenses on UPI - lock the purpose, track every rupee, reconcile automatically.
           </Typography>
           <Link
             component={RouterLink}

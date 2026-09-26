@@ -1,7 +1,9 @@
 import CheckCircleOutline from "@mui/icons-material/CheckCircleOutline";
-import CreditCardOutlined from "@mui/icons-material/CreditCardOutlined";
+import LocalGasStationOutlined from "@mui/icons-material/LocalGasStationOutlined";
+import QrCodeScanner from "@mui/icons-material/QrCodeScanner";
 import ReceiptLongOutlined from "@mui/icons-material/ReceiptLongOutlined";
-import TrendingUp from "@mui/icons-material/TrendingUp";
+import RestaurantOutlined from "@mui/icons-material/RestaurantOutlined";
+import WarningAmberOutlined from "@mui/icons-material/WarningAmberOutlined";
 import { Box, LinearProgress, Stack, Typography } from "@mui/material";
 import { landing } from "./landingTokens";
 
@@ -47,7 +49,7 @@ function Donut() {
           width: "100%",
           height: "100%",
           borderRadius: "50%",
-          background: `conic-gradient(${landing.blue} 0 42%, ${landing.green} 42% 68%, #94A3B8 68% 85%, #CBD5E1 85% 100%)`,
+          background: `conic-gradient(${landing.blue} 0 38%, ${landing.green} 38% 64%, #F59E0B 64% 82%, #CBD5E1 82% 100%)`,
         }}
       />
       <Box
@@ -60,13 +62,37 @@ function Donut() {
           placeItems: "center",
         }}
       >
-        <Typography sx={{ fontSize: 11, fontWeight: 700, color: landing.ink }}>Spend</Typography>
+        <Typography sx={{ fontSize: 11, fontWeight: 700, color: landing.ink }}>UPI</Typography>
       </Box>
     </Box>
   );
 }
 
-/** Rich product UI mock used in the homepage hero. */
+function StatusPill({ label, tone }: { label: string; tone: "ok" | "warn" | "live" }) {
+  const map = {
+    ok: { bg: landing.greenSoft, fg: landing.green },
+    warn: { bg: "#FEF3C7", fg: "#B45309" },
+    live: { bg: landing.greenSoft, fg: landing.green },
+  } as const;
+  return (
+    <Box
+      sx={{
+        px: 1.1,
+        py: 0.35,
+        borderRadius: 99,
+        bgcolor: map[tone].bg,
+        color: map[tone].fg,
+        fontSize: 11,
+        fontWeight: 700,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
+    </Box>
+  );
+}
+
+/** Finance dashboard: every UPI spend, verified and categorized. */
 export function HeroDashboardMock() {
   return (
     <Box
@@ -84,28 +110,18 @@ export function HeroDashboardMock() {
         overflow: "hidden",
       }}
     >
-      <Stack spacing={1.5} sx={{ position: "relative" }}>
+      <Stack spacing={1.5}>
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 0.5 }}>
           <Typography sx={{ color: landing.muted, fontSize: 12, fontWeight: 600 }}>
-            Company workspace
+            Business expense dashboard
           </Typography>
-          <Box
-            sx={{
-              px: 1.25,
-              py: 0.4,
-              borderRadius: 99,
-              bgcolor: landing.greenSoft,
-              color: landing.green,
-              fontSize: 11,
-              fontWeight: 700,
-            }}
-          >
-            Live
-          </Box>
+          <StatusPill label="Live UPI" tone="live" />
         </Stack>
 
         <Box sx={{ ...insetPanel, p: 2 }}>
-          <Typography sx={{ fontSize: 12, color: landing.muted, fontWeight: 600 }}>Company balance</Typography>
+          <Typography sx={{ fontSize: 12, color: landing.muted, fontWeight: 600 }}>
+            Tracked UPI spend this month
+          </Typography>
           <Typography
             sx={{
               fontFamily: landing.fontDisplay,
@@ -116,84 +132,42 @@ export function HeroDashboardMock() {
               mt: 0.5,
             }}
           >
-            ₹24,80,450
+            ₹4,86,240
           </Typography>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
-            <TrendingUp sx={{ fontSize: 16, color: landing.green }} />
-            <Typography sx={{ fontSize: 12, color: landing.green, fontWeight: 600 }}>
-              +12.4% vs last month
-            </Typography>
-          </Stack>
+          <Typography sx={{ fontSize: 12, color: landing.muted, mt: 0.75 }}>
+            128 payments · 31 employees · auto-reconciled
+          </Typography>
         </Box>
 
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-          <Box sx={{ ...insetPanel, p: 1.75, flex: 1 }}>
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-              <CreditCardOutlined sx={{ fontSize: 18, color: landing.blue }} />
-              <Typography sx={{ fontSize: 12, fontWeight: 700, color: landing.ink }}>Card spending</Typography>
-            </Stack>
-            <Typography sx={{ fontSize: 20, fontWeight: 700, color: landing.ink }}>₹3,42,800</Typography>
-            <Typography sx={{ fontSize: 11, color: landing.muted, mt: 0.5 }}>This month · 48 cards</Typography>
-            <Box sx={{ mt: 1.5 }}>
-              <LinearProgress
-                variant="determinate"
-                value={68}
-                sx={{
-                  height: 6,
-                  borderRadius: 99,
-                  bgcolor: "#fff",
-                  "& .MuiLinearProgress-bar": { bgcolor: landing.blue, borderRadius: 99 },
-                }}
-              />
+          {[
+            { label: "Verified", value: "94", hint: "Payment + receipt matched" },
+            { label: "Needs review", value: "7", hint: "Policy or attendance flag" },
+            { label: "Pending receipt", value: "4", hint: "UPI paid, bill missing" },
+          ].map((tile) => (
+            <Box key={tile.label} sx={{ ...insetPanel, p: 1.5, flex: 1 }}>
+              <Typography sx={{ fontSize: 11, color: landing.muted, fontWeight: 600 }}>{tile.label}</Typography>
+              <Typography sx={{ fontSize: 20, fontWeight: 700, color: landing.ink, mt: 0.25 }}>{tile.value}</Typography>
+              <Typography sx={{ fontSize: 10, color: landing.muted, mt: 0.4 }}>{tile.hint}</Typography>
             </Box>
-          </Box>
-          <Box sx={{ ...insetPanel, p: 1.75, flex: 1 }}>
-            <Typography sx={{ fontSize: 12, fontWeight: 700, color: landing.ink, mb: 1 }}>
-              Pending approvals
-            </Typography>
-            <Typography sx={{ fontSize: 20, fontWeight: 700, color: landing.ink }}>7</Typography>
-            <Typography sx={{ fontSize: 11, color: landing.muted, mt: 0.5 }}>₹1,18,240 awaiting review</Typography>
-            <Stack direction="row" spacing={0.75} sx={{ mt: 1.5 }}>
-              {["Travel", "Meals", "Vendors"].map((t) => (
-                <Box
-                  key={t}
-                  sx={{
-                    px: 1,
-                    py: 0.35,
-                    borderRadius: 1,
-                    bgcolor: "#fff",
-                    border: `1px solid ${landing.line}`,
-                    fontSize: 10,
-                    fontWeight: 600,
-                    color: landing.muted,
-                  }}
-                >
-                  {t}
-                </Box>
-              ))}
-            </Stack>
-          </Box>
+          ))}
         </Stack>
 
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
           <Box sx={{ ...insetPanel, p: 1.75, flex: 1.2 }}>
             <Typography sx={{ fontSize: 12, fontWeight: 700, color: landing.ink, mb: 1.25 }}>
-              Monthly spend
+              Spend by week
             </Typography>
             <MiniBar values={[42, 55, 38, 62, 48, 71, 58, 80]} />
-            <Stack direction="row" justifyContent="space-between" sx={{ mt: 0.75 }}>
-              <Typography sx={{ fontSize: 10, color: landing.muted }}>Jan</Typography>
-              <Typography sx={{ fontSize: 10, color: landing.muted }}>Aug</Typography>
-            </Stack>
           </Box>
           <Box sx={{ ...insetPanel, p: 1.75, flex: 1, display: "flex", gap: 1.5, alignItems: "center" }}>
             <Donut />
             <Stack spacing={0.5}>
-              <Typography sx={{ fontSize: 12, fontWeight: 700, color: landing.ink }}>Categories</Typography>
+              <Typography sx={{ fontSize: 12, fontWeight: 700, color: landing.ink }}>Locked by purpose</Typography>
               {[
-                { l: "Travel", c: landing.blue },
-                { l: "Software", c: landing.green },
-                { l: "Vendors", c: "#94A3B8" },
+                { l: "Fuel 38%", c: landing.blue },
+                { l: "Meals 26%", c: landing.green },
+                { l: "Travel 18%", c: "#F59E0B" },
               ].map((r) => (
                 <Stack key={r.l} direction="row" spacing={0.75} alignItems="center">
                   <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: r.c }} />
@@ -206,24 +180,24 @@ export function HeroDashboardMock() {
 
         <Box sx={{ ...insetPanel, p: 1.5 }}>
           <Typography sx={{ fontSize: 12, fontWeight: 700, color: landing.ink, mb: 1 }}>
-            Finance activity
+            Every UPI spend, as it happens
           </Typography>
           <Stack spacing={1}>
             {[
               {
-                icon: <CheckCircleOutline sx={{ fontSize: 16, color: landing.green }} />,
-                title: "UPI payment · CloudServe",
-                meta: "₹24,500 · Settled",
+                icon: <LocalGasStationOutlined sx={{ fontSize: 16, color: landing.blue }} />,
+                title: "HP Petrol · Fuel",
+                meta: "₹2,400 · UPI matched · Verified",
               },
               {
-                icon: <ReceiptLongOutlined sx={{ fontSize: 16, color: landing.blue }} />,
-                title: "Reimbursement · Priya S.",
-                meta: "₹3,280 · Approved",
+                icon: <RestaurantOutlined sx={{ fontSize: 16, color: landing.green }} />,
+                title: "Cafe Madras · Meals",
+                meta: "₹680 · Receipt + policy OK",
               },
               {
-                icon: <CreditCardOutlined sx={{ fontSize: 16, color: landing.navyMid }} />,
-                title: "Virtual card spend · Ads",
-                meta: "₹18,900 · Cleared",
+                icon: <WarningAmberOutlined sx={{ fontSize: 16, color: "#B45309" }} />,
+                title: "Indigo · Travel",
+                meta: "₹8,420 · Attendance conflict",
               },
             ].map((row) => (
               <Stack
@@ -236,8 +210,6 @@ export function HeroDashboardMock() {
                   borderRadius: 1.5,
                   bgcolor: "#fff",
                   border: `1px solid ${landing.line}`,
-                  transition: "border-color 0.2s, box-shadow 0.2s",
-                  "&:hover": { borderColor: landing.blue, boxShadow: landing.shadowSoft },
                 }}
               >
                 <Box
@@ -268,90 +240,104 @@ export function HeroDashboardMock() {
   );
 }
 
-export function CardsControlMock() {
+/** Employee phone: scan QR and pay with the UPI app they already use. */
+export function PhonePayMock() {
   return (
-    <Box sx={{ ...panel, p: { xs: 2, md: 3 }, overflow: "hidden" }}>
-      <Stack spacing={2}>
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-          {[
-            { label: "Virtual", last4: "4821", limit: "₹50,000", used: 62, tone: landing.blue },
-            { label: "Physical", last4: "9033", limit: "₹1,00,000", used: 38, tone: landing.navy },
-          ].map((card) => (
-            <Box
-              key={card.last4}
-              sx={{
-                flex: 1,
-                p: 2.25,
-                borderRadius: 3,
-                bgcolor: landing.wash,
-                border: `1px solid ${landing.line}`,
-                color: landing.ink,
-                minHeight: 140,
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "space-between",
-                transition: "transform 0.25s ease, box-shadow 0.25s ease",
-                "&:hover": { transform: "translateY(-3px)", boxShadow: landing.shadowSoft },
-              }}
-            >
-              <Stack direction="row" justifyContent="space-between">
-                <Typography sx={{ fontSize: 12, fontWeight: 600, color: landing.muted }}>{card.label} card</Typography>
-                <Typography sx={{ fontSize: 11, color: landing.muted }}>•••• {card.last4}</Typography>
-              </Stack>
-              <Box>
-                <Typography sx={{ fontSize: 11, color: landing.muted }}>Spend limit</Typography>
-                <Typography sx={{ fontWeight: 700, fontSize: 18, color: landing.ink }}>{card.limit}</Typography>
-                <LinearProgress
-                  variant="determinate"
-                  value={card.used}
-                  sx={{
-                    mt: 1,
-                    height: 5,
-                    borderRadius: 99,
-                    bgcolor: "#fff",
-                    "& .MuiLinearProgress-bar": { bgcolor: card.tone, borderRadius: 99 },
-                  }}
-                />
-              </Box>
-            </Box>
-          ))}
-        </Stack>
-        <Box sx={{ p: 2, borderRadius: 2, bgcolor: landing.wash }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 700, color: landing.ink, mb: 1.25 }}>
-            Team permissions
-          </Typography>
-          {[
-            { name: "Ananya R.", role: "Can spend · Travel", status: "Active" },
-            { name: "Vikram M.", role: "Approver · Ops", status: "Active" },
-            { name: "Card · Marketing", role: "Frozen pending review", status: "Frozen" },
-          ].map((row) => (
-            <Stack
-              key={row.name}
-              direction="row"
-              justifyContent="space-between"
-              alignItems="center"
-              sx={{ py: 1, borderBottom: `1px solid ${landing.line}`, "&:last-child": { borderBottom: 0 } }}
-            >
-              <Box>
-                <Typography sx={{ fontSize: 13, fontWeight: 600, color: landing.ink }}>{row.name}</Typography>
-                <Typography sx={{ fontSize: 11, color: landing.muted }}>{row.role}</Typography>
-              </Box>
-              <Box
-                sx={{
-                  px: 1.1,
-                  py: 0.35,
-                  borderRadius: 99,
-                  fontSize: 11,
-                  fontWeight: 700,
-                  bgcolor: row.status === "Frozen" ? "#FEF3C7" : landing.greenSoft,
-                  color: row.status === "Frozen" ? "#B45309" : landing.green,
-                }}
-              >
-                {row.status}
-              </Box>
-            </Stack>
-          ))}
+    <Box
+      sx={{
+        width: 260,
+        mx: "auto",
+        borderRadius: "36px",
+        border: `10px solid ${landing.navy}`,
+        bgcolor: "#fff",
+        boxShadow: landing.shadow,
+        overflow: "hidden",
+      }}
+    >
+      <Box sx={{ bgcolor: landing.navy, color: "#fff", px: 2, pt: 1.5, pb: 2 }}>
+        <Typography sx={{ fontSize: 11, opacity: 0.7, fontWeight: 600 }}>AllPay · Pay at work</Typography>
+        <Typography sx={{ fontFamily: landing.fontDisplay, fontWeight: 700, fontSize: 18, mt: 0.5 }}>
+          Scan & pay on UPI
+        </Typography>
+      </Box>
+      <Stack spacing={1.5} sx={{ p: 2 }}>
+        <Box
+          sx={{
+            borderRadius: 2,
+            border: `1.5px dashed ${landing.blue}`,
+            bgcolor: landing.blueSoft,
+            height: 120,
+            display: "grid",
+            placeItems: "center",
+          }}
+        >
+          <Stack alignItems="center" spacing={0.75}>
+            <QrCodeScanner sx={{ fontSize: 36, color: landing.blue }} />
+            <Typography sx={{ fontSize: 12, fontWeight: 700, color: landing.navy }}>Merchant QR</Typography>
+          </Stack>
         </Box>
+        <Box sx={{ ...insetPanel, p: 1.5 }}>
+          <Typography sx={{ fontSize: 11, color: landing.muted }}>Paying</Typography>
+          <Typography sx={{ fontWeight: 700, color: landing.ink }}>Cafe Madras</Typography>
+          <Typography sx={{ fontFamily: landing.fontDisplay, fontSize: 22, fontWeight: 700, color: landing.navy }}>
+            ₹680
+          </Typography>
+          <Typography sx={{ fontSize: 11, color: landing.muted, mt: 0.5 }}>Purpose locked · Meals</Typography>
+        </Box>
+        <Box
+          sx={{
+            py: 1.15,
+            borderRadius: 2,
+            bgcolor: landing.blue,
+            color: "#fff",
+            textAlign: "center",
+            fontSize: 13,
+            fontWeight: 700,
+          }}
+        >
+          Pay with PhonePe / GPay
+        </Box>
+        <Typography sx={{ fontSize: 10, color: landing.muted, textAlign: "center" }}>
+          Same UPI apps. Expense recorded instantly.
+        </Typography>
+      </Stack>
+    </Box>
+  );
+}
+
+export function PolicyLockMock() {
+  return (
+    <Box sx={{ ...panel, p: { xs: 2, md: 3 } }}>
+      <Typography sx={{ fontSize: 13, fontWeight: 700, color: landing.ink, mb: 2 }}>
+        Lock spend to a purpose before anyone pays
+      </Typography>
+      <Stack spacing={1.25}>
+        {[
+          { cat: "Fuel", lock: "Petrol pumps only", cap: "₹3,000 / txn · ₹40,000 / mo", used: 62 },
+          { cat: "Meals", lock: "Food & restaurants", cap: "₹500 / txn · ₹8,000 / mo", used: 44 },
+          { cat: "Travel", lock: "Weekdays · travel MCC", cap: "₹15,000 / trip", used: 28 },
+          { cat: "Office", lock: "Stationery & supplies", cap: "₹2,000 / txn", used: 18 },
+        ].map((row) => (
+          <Box key={row.cat} sx={{ p: 1.75, borderRadius: 2, bgcolor: landing.wash }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="baseline" sx={{ mb: 0.75 }}>
+              <Box>
+                <Typography sx={{ fontSize: 14, fontWeight: 700, color: landing.ink }}>{row.cat}</Typography>
+                <Typography sx={{ fontSize: 11, color: landing.muted }}>{row.lock}</Typography>
+              </Box>
+              <Typography sx={{ fontSize: 11, fontWeight: 700, color: landing.blue }}>{row.cap}</Typography>
+            </Stack>
+            <LinearProgress
+              variant="determinate"
+              value={row.used}
+              sx={{
+                height: 6,
+                borderRadius: 99,
+                bgcolor: "#fff",
+                "& .MuiLinearProgress-bar": { bgcolor: landing.blue, borderRadius: 99 },
+              }}
+            />
+          </Box>
+        ))}
       </Stack>
     </Box>
   );
@@ -379,18 +365,18 @@ export function ExpenseWorkflowMock() {
             }}
           >
             <ReceiptLongOutlined sx={{ fontSize: 32, color: landing.blue }} />
-            <Typography sx={{ fontWeight: 700, color: landing.ink, fontSize: 14 }}>Receipt uploaded</Typography>
-            <Typography sx={{ fontSize: 12, color: landing.muted }}>IMG_2841.jpg · 1.2 MB</Typography>
+            <Typography sx={{ fontWeight: 700, color: landing.ink, fontSize: 14 }}>Receipt + UPI payment</Typography>
+            <Typography sx={{ fontSize: 12, color: landing.muted }}>UPI Ref · 3248 1902 5512</Typography>
           </Box>
           <Box sx={{ flex: 1.2, p: 2, borderRadius: 2.5, bgcolor: landing.wash }}>
             <Typography sx={{ fontSize: 12, fontWeight: 700, color: landing.ink, mb: 1.25 }}>
-              Extracted fields
+              Captured automatically
             </Typography>
             {[
               ["Merchant", "Indigo Airlines"],
               ["Amount", "₹8,420"],
-              ["Date", "12 Sep 2026"],
-              ["Category", "Travel"],
+              ["Purpose", "Travel"],
+              ["UPI app", "PhonePe"],
             ].map(([k, v]) => (
               <Stack key={k} direction="row" justifyContent="space-between" sx={{ py: 0.6 }}>
                 <Typography sx={{ fontSize: 12, color: landing.muted }}>{k}</Typography>
@@ -401,16 +387,16 @@ export function ExpenseWorkflowMock() {
         </Stack>
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
           <Box sx={{ flex: 1, p: 1.75, borderRadius: 2, bgcolor: landing.greenSoft }}>
-            <Typography sx={{ fontSize: 11, color: landing.green, fontWeight: 700 }}>APPROVAL</Typography>
-            <Typography sx={{ fontSize: 14, fontWeight: 700, color: landing.ink, mt: 0.5 }}>Approved</Typography>
-            <Typography sx={{ fontSize: 12, color: landing.muted }}>Reimburse ₹8,420</Typography>
+            <Typography sx={{ fontSize: 11, color: landing.green, fontWeight: 700 }}>PAYMENT MATCH</Typography>
+            <Typography sx={{ fontSize: 14, fontWeight: 700, color: landing.ink, mt: 0.5 }}>UPI confirmed</Typography>
+            <Typography sx={{ fontSize: 12, color: landing.muted }}>Claim equals the rupee paid</Typography>
           </Box>
           <Box sx={{ flex: 1, p: 1.75, borderRadius: 2, bgcolor: "#FEF3C7" }}>
-            <Typography sx={{ fontSize: 11, color: "#B45309", fontWeight: 700 }}>POLICY</Typography>
+            <Typography sx={{ fontSize: 11, color: "#B45309", fontWeight: 700 }}>NEEDS A LOOK</Typography>
             <Typography sx={{ fontSize: 14, fontWeight: 700, color: landing.ink, mt: 0.5 }}>
-              Within limit
+              Punched in at office
             </Typography>
-            <Typography sx={{ fontSize: 12, color: landing.muted }}>Travel cap ₹15,000 / trip</Typography>
+            <Typography sx={{ fontSize: 12, color: landing.muted }}>Travel claim at 09:38 · ask why</Typography>
           </Box>
         </Stack>
       </Stack>
@@ -418,68 +404,108 @@ export function ExpenseWorkflowMock() {
   );
 }
 
-export function VendorPayMock() {
+export function VerificationMock() {
   return (
     <Box sx={{ ...panel, p: { xs: 2, md: 3 } }}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-        <Typography sx={{ fontWeight: 700, color: landing.ink }}>Invoice queue</Typography>
-        <Typography sx={{ fontSize: 13, fontWeight: 700, color: landing.blue }}>Payable ₹6,42,000</Typography>
+        <Box>
+          <Typography sx={{ fontWeight: 700, color: landing.ink }}>Automatic verification</Typography>
+          <Typography sx={{ fontSize: 12, color: landing.muted }}>Seven checks before finance approves</Typography>
+        </Box>
+        <StatusPill label="Needs review" tone="warn" />
       </Stack>
-      <Stack spacing={1.25}>
+      <Stack spacing={1}>
         {[
-          { vendor: "Nova Logistics", amount: "₹1,85,000", step: "Maker reviewed", pct: 50 },
-          { vendor: "Pixel Studio", amount: "₹72,400", step: "Checker pending", pct: 75 },
-          { vendor: "OfficeMart", amount: "₹28,900", step: "Scheduled", pct: 90 },
-        ].map((inv) => (
-          <Box key={inv.vendor} sx={{ p: 1.75, borderRadius: 2, bgcolor: landing.wash }}>
-            <Stack direction="row" justifyContent="space-between" sx={{ mb: 1 }}>
-              <Box>
-                <Typography sx={{ fontSize: 13, fontWeight: 700, color: landing.ink }}>{inv.vendor}</Typography>
-                <Typography sx={{ fontSize: 11, color: landing.muted }}>{inv.step}</Typography>
-              </Box>
-              <Typography sx={{ fontSize: 13, fontWeight: 700, color: landing.ink }}>{inv.amount}</Typography>
-            </Stack>
-            <LinearProgress
-              variant="determinate"
-              value={inv.pct}
-              sx={{
-                height: 6,
-                borderRadius: 99,
-                bgcolor: "#fff",
-                "& .MuiLinearProgress-bar": { bgcolor: landing.blue, borderRadius: 99 },
-              }}
-            />
-          </Box>
+          { label: "UPI payment match", detail: "₹8,420 paid = ₹8,420 claimed", ok: true },
+          { label: "Expense policy", detail: "Within ₹15,000 travel cap", ok: true },
+          { label: "Attendance", detail: "Punched in 09:30–18:30", ok: false },
+          { label: "Duplicate claim", detail: "UPI reference is unique", ok: true },
+          { label: "Category vs MCC", detail: "Airline MCC matches Travel", ok: true },
+        ].map((row) => (
+          <Stack
+            key={row.label}
+            direction="row"
+            spacing={1.25}
+            alignItems="center"
+            sx={{ p: 1.25, borderRadius: 2, bgcolor: landing.wash }}
+          >
+            {row.ok ? (
+              <CheckCircleOutline sx={{ fontSize: 18, color: landing.green }} />
+            ) : (
+              <WarningAmberOutlined sx={{ fontSize: 18, color: "#B45309" }} />
+            )}
+            <Box sx={{ minWidth: 0, flex: 1 }}>
+              <Typography sx={{ fontSize: 13, fontWeight: 700, color: landing.ink }}>{row.label}</Typography>
+              <Typography sx={{ fontSize: 11, color: landing.muted }}>{row.detail}</Typography>
+            </Box>
+          </Stack>
         ))}
       </Stack>
-      <Box sx={{ mt: 2, p: 1.5, borderRadius: 2, border: `1px solid ${landing.line}` }}>
-        <Typography sx={{ fontSize: 12, fontWeight: 700, color: landing.ink, mb: 1 }}>
-          Approval timeline
-        </Typography>
-        <Stack direction="row" spacing={1} alignItems="center">
-          {["Submitted", "Maker", "Checker", "Paid"].map((s, i) => (
-            <Stack key={s} direction="row" alignItems="center" spacing={1} sx={{ flex: 1 }}>
-              <Box
-                sx={{
-                  width: 22,
-                  height: 22,
-                  borderRadius: "50%",
-                  bgcolor: i < 3 ? landing.blue : landing.line,
-                  color: i < 3 ? "#fff" : landing.muted,
-                  fontSize: 11,
-                  fontWeight: 700,
-                  display: "grid",
-                  placeItems: "center",
-                }}
-              >
-                {i + 1}
+    </Box>
+  );
+}
+
+export function ReconciliationMock() {
+  return (
+    <Box sx={{ ...panel, p: { xs: 2, md: 3 } }}>
+      <Typography sx={{ fontWeight: 700, color: landing.ink, mb: 2 }}>
+        One record: payment, receipt, verdict
+      </Typography>
+      <Box sx={{ overflowX: "auto" }}>
+        <Box component="table" sx={{ width: "100%", borderCollapse: "collapse", minWidth: 380 }}>
+          <Box component="thead">
+            <Box component="tr" sx={{ textAlign: "left" }}>
+              {["Expense", "UPI", "Receipt", "Verdict"].map((h) => (
+                <Box
+                  component="th"
+                  key={h}
+                  sx={{
+                    fontSize: 11,
+                    color: landing.muted,
+                    fontWeight: 700,
+                    pb: 1,
+                    borderBottom: `1px solid ${landing.line}`,
+                  }}
+                >
+                  {h}
+                </Box>
+              ))}
+            </Box>
+          </Box>
+          <Box component="tbody">
+            {[
+              ["HP Petrol · ₹2,400", "Matched", "On file", "Verified"],
+              ["Cafe Madras · ₹680", "Matched", "On file", "Approved"],
+              ["OfficeMart · ₹1,150", "Matched", "On file", "Synced"],
+            ].map((row) => (
+              <Box component="tr" key={row[0]}>
+                {row.map((cell, i) => (
+                  <Box
+                    component="td"
+                    key={`${row[0]}-${cell}`}
+                    sx={{
+                      py: 1.15,
+                      fontSize: 12,
+                      fontWeight: i === 0 ? 650 : 500,
+                      color: i === 0 ? landing.ink : landing.green,
+                      borderBottom: `1px solid ${landing.line}`,
+                    }}
+                  >
+                    {cell}
+                  </Box>
+                ))}
               </Box>
-              <Typography sx={{ fontSize: 11, color: landing.muted, display: { xs: "none", sm: "block" } }}>
-                {s}
-              </Typography>
-            </Stack>
-          ))}
-        </Stack>
+            ))}
+          </Box>
+        </Box>
+      </Box>
+      <Box sx={{ mt: 2, p: 1.5, borderRadius: 2, bgcolor: landing.blueSoft }}>
+        <Typography sx={{ fontSize: 13, fontWeight: 700, color: landing.navy }}>
+          Month-end is a dashboard, not an Excel chase.
+        </Typography>
+        <Typography sx={{ fontSize: 12, color: landing.muted, mt: 0.5 }}>
+          Export every UPI reference, merchant, category, and approval — already tied together.
+        </Typography>
       </Box>
     </Box>
   );
@@ -492,68 +518,25 @@ export function AnalyticsMock() {
         <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
           <Box sx={{ flex: 1.4 }}>
             <Typography sx={{ fontSize: 13, fontWeight: 700, color: landing.ink, mb: 1 }}>
-              Cash flow (90 days)
+              Team spend (90 days)
             </Typography>
             <MiniBar values={[30, 45, 38, 60, 52, 70, 64, 78, 72, 88]} color={landing.green} />
           </Box>
           <Box sx={{ flex: 1, display: "flex", gap: 1.5, alignItems: "center" }}>
             <Donut />
             <Stack spacing={0.4}>
-              <Typography sx={{ fontSize: 13, fontWeight: 700, color: landing.ink }}>Category mix</Typography>
-              <Typography sx={{ fontSize: 11, color: landing.muted }}>Travel 42% · SaaS 26%</Typography>
-              <Typography sx={{ fontSize: 11, color: landing.muted }}>Vendors 17% · Other 15%</Typography>
+              <Typography sx={{ fontSize: 13, fontWeight: 700, color: landing.ink }}>Purpose mix</Typography>
+              <Typography sx={{ fontSize: 11, color: landing.muted }}>Fuel 38% · Meals 26%</Typography>
+              <Typography sx={{ fontSize: 11, color: landing.muted }}>Travel 18% · Office 18%</Typography>
             </Stack>
           </Box>
         </Stack>
-        <Box sx={{ overflowX: "auto" }}>
-          <Box component="table" sx={{ width: "100%", borderCollapse: "collapse", minWidth: 360 }}>
-            <Box component="thead">
-              <Box component="tr" sx={{ textAlign: "left" }}>
-                {["Activity", "Amount", "Status"].map((h) => (
-                  <Box
-                    component="th"
-                    key={h}
-                    sx={{
-                      fontSize: 11,
-                      color: landing.muted,
-                      fontWeight: 700,
-                      pb: 1,
-                      borderBottom: `1px solid ${landing.line}`,
-                    }}
-                  >
-                    {h}
-                  </Box>
-                ))}
-              </Box>
-            </Box>
-            <Box component="tbody">
-              {[
-                ["Payroll transfer", "₹12,40,000", "Synced"],
-                ["Vendor batch", "₹3,18,200", "Exported"],
-                ["Card settlement", "₹2,05,600", "Posted"],
-              ].map((row) => (
-                <Box component="tr" key={row[0]}>
-                  {row.map((cell, i) => (
-                    <Box
-                      component="td"
-                      key={cell}
-                      sx={{
-                        py: 1.1,
-                        fontSize: 12,
-                        fontWeight: i === 0 ? 650 : 500,
-                        color: i === 2 ? landing.green : landing.ink,
-                        borderBottom: `1px solid ${landing.line}`,
-                      }}
-                    >
-                      {cell}
-                    </Box>
-                  ))}
-                </Box>
-              ))}
-            </Box>
-          </Box>
-        </Box>
       </Stack>
     </Box>
   );
 }
+
+/** @deprecated Use PolicyLockMock — kept so older imports do not break. */
+export const CardsControlMock = PolicyLockMock;
+/** @deprecated Use ReconciliationMock */
+export const VendorPayMock = ReconciliationMock;

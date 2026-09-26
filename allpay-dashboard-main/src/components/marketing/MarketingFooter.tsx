@@ -9,29 +9,28 @@ const columns = [
   {
     title: "Product",
     links: [
-      { label: "Corporate cards", to: "/#product" },
-      { label: "Expense management", to: "/#product" },
-      { label: "Accounts payable", to: "/#product" },
-      { label: "Business accounts", to: "/#product" },
-      { label: "UPI payments", to: "/#product" },
-      { label: "Accounting sync", to: "/#product" },
+      { label: "UPI expenses", to: "/#product" },
+      { label: "Spend locks", to: "/#controls" },
+      { label: "Verification", to: "/#verification" },
+      { label: "Reconciliation", to: "/#reconciliation" },
+      { label: "Categories", to: "/#categories" },
       { label: "Pricing", to: "/#pricing" },
     ],
   },
   {
     title: "Solutions",
     links: [
-      { label: "Finance teams", to: "/#solutions" },
-      { label: "Founders", to: "/#solutions" },
-      { label: "Operations", to: "/#solutions" },
-      { label: "Employees", to: "/#solutions" },
+      { label: "Business expenses", to: "/#solutions" },
+      { label: "Fleet & fuel", to: "/#solutions" },
+      { label: "Petty cash", to: "/#solutions" },
+      { label: "Reimbursements", to: "/#solutions" },
     ],
   },
   {
     title: "Resources",
     links: [
       { label: "How it works", to: "/#how-it-works" },
-      { label: "Security", to: "/#security" },
+      { label: "FAQs", to: "/#faq" },
       { label: "Customer stories", to: "/#stories" },
     ],
   },
@@ -84,8 +83,8 @@ export function MarketingFooter() {
                 fontFamily: landing.fontBody,
               }}
             >
-              A modern business account designed to save money with corporate cards, credit, money transfers, expense
-              reimbursements, and automated accounting, all in one place.
+              Business expense management on UPI. Employees pay at existing merchant QR codes. Finance tracks, verifies,
+              and reconciles every rupee on one dashboard.
             </Typography>
             <Stack direction="row" spacing={0.5} sx={{ mt: 2 }}>
               <IconButton aria-label="LinkedIn (placeholder)" size="small" sx={{ color: "rgba(255,255,255,0.7)", "&:focus-visible": focusRing }}>
