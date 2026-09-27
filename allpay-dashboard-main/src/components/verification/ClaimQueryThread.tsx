@@ -198,7 +198,7 @@ export function ClaimQueryThread({
           position: "fixed",
           right: { xs: 16, sm: 24 },
           bottom: { xs: 16, sm: 24 },
-          zIndex: (theme) => theme.zIndex.speedDial,
+          zIndex: (theme) => theme.zIndex.appBar + 2,
           display: "flex",
           flexDirection: "column",
           alignItems: "flex-end",
@@ -211,7 +211,7 @@ export function ClaimQueryThread({
             sx={{
               width: { xs: "min(100vw - 32px, 380px)", sm: 380 },
               height: 480,
-              maxHeight: "min(480px, calc(100vh - 120px))",
+              maxHeight: "min(480px, calc(100vh - 88px - 88px))",
               display: "flex",
               flexDirection: "column",
               overflow: "hidden",
@@ -317,7 +317,7 @@ export function ClaimQueryThread({
             }}
           >
             {open ? <Close sx={{ mr: 1 }} /> : <ChatOutlined sx={{ mr: 1 }} />}
-            {open ? "Close" : role === "admin" ? "Ask employe" : "Claim chat"}
+            {open ? "Close" : role === "admin" ? "Ask employee" : "Query claim"}
             {!open && messageCount > 0 ? (
               <Chip
                 size="small"

@@ -40,7 +40,7 @@ import { useState } from "react";
 import { Link as RouterLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAdminData } from "../../context/AdminDataContext";
 import { useAuth } from "../../context/AuthContext";
-import { SIDEBAR } from "../../theme";
+import { SIDEBAR, SIDEBAR_SCROLL_SX } from "../../theme";
 
 type NavItem = { label: string; to: string; icon: React.ReactNode };
 type NavGroup = { heading: string; items: NavItem[] };
@@ -224,7 +224,7 @@ export const AdminLayout = () => {
             bgcolor: SIDEBAR.bg,
             color: SIDEBAR.text,
             borderRight: `1px solid ${SIDEBAR.border}`,
-            overflowX: "hidden",
+            ...SIDEBAR_SCROLL_SX,
           },
         }}
       >

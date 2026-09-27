@@ -6,7 +6,7 @@ import {
   TextField,
 } from "@mui/material";
 import dayjs from "dayjs";
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import {
   AdminEmptyState,
@@ -23,6 +23,10 @@ import { ReceiptExplorer } from "../../components/receipts/ReceiptExplorer";
 import { useAdminData } from "../../context/AdminDataContext";
 import { inr, STATUS_OPTIONS } from "../../utils/labels";
 import type { Transaction } from "../../types";
+
+const DailySpendChart = lazy(() =>
+  import("../../components/charts/DailySpendChart").then((m) => ({ default: m.DailySpendChart }))
+);
 
 export function AdminDashboardPage() {
   const { transactions, employees, errorMessage, isBootstrapping } = useAdminData();
@@ -64,6 +68,10 @@ export function AdminDashboardPage() {
         <AdminKpi label="Flagged" value={String(flagged)} accent="error" />
         <AdminKpi label="Today's spend" value={inr(todaySpend)} accent="teal" />
       </AdminKpiRow>
+
+      <Suspense fallback={<AdminPageLoader label="Loading spend chart…" />}>
+        <DailySpendChart transactions={transactions} loading={isBootstrapping} />
+      </Suspense>
 
       <AdminSectionLabel>Latest receipts</AdminSectionLabel>
 

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useReducer, useState } from "react";
+import { lazy, Suspense, useEffect, useReducer, useState } from "react";
 import {
   Alert,
   CircularProgress,
@@ -18,12 +18,14 @@ import {
 import { useEmployeeData } from "../../context/EmployeeDataContext";
 import { computeEmployeeSpendFromTransactions } from "../../utils/employeeSpend";
 
-const EmployeeSpendBarChart = lazy(() =>
-  import("../../components/charts/EmployeeSpendBarChart").then((m) => ({ default: m.EmployeeSpendBarChart }))
+const DailySpendChart = lazy(() =>
+  import("../../components/charts/DailySpendChart").then((m) => ({ default: m.DailySpendChart }))
+);
+const CategorySpendChart = lazy(() =>
+  import("../../components/charts/DailySpendChart").then((m) => ({ default: m.CategorySpendChart }))
 );
 
 const fmt = (n: number) => `₹${n.toLocaleString("en-IN")}`;
-const CHART_CATEGORIES = ["Fuel", "Office Supplies", "Travel", "Lodging", "Bars/Alcohol", "Meals"];
 
 type SpendLoadState = {
   data: EmployeeSpendResponse | null;
@@ -94,14 +96,6 @@ export function EmployeeSpendPage() {
     };
   }, [range, transactions]);
 
-  const chartData = useMemo(() => {
-    const fromApi = loadState.data?.byCategory ?? [];
-    return CHART_CATEGORIES.map((name) => {
-      const row = fromApi.find((c) => c.category === name);
-      return { name, value: row?.total ?? 0 };
-    });
-  }, [loadState.data]);
-
   const showLoader = (loadState.loading || isBootstrapping) && !loadState.data;
 
   return (
@@ -136,23 +130,25 @@ export function EmployeeSpendPage() {
         )}
       </AdminCard>
 
-      <AdminCard title="By category">
-        {showLoader ? (
+      <Suspense
+        fallback={
           <Stack alignItems="center" py={6}>
             <CircularProgress size={32} />
           </Stack>
-        ) : loadState.data ? (
-          <Suspense
-            fallback={
-              <Stack alignItems="center" py={6}>
-                <CircularProgress size={32} />
-              </Stack>
-            }
-          >
-            <EmployeeSpendBarChart chartData={chartData} />
-          </Suspense>
-        ) : null}
-      </AdminCard>
+        }
+      >
+        <DailySpendChart transactions={transactions} loading={showLoader} portal="employee" />
+      </Suspense>
+
+      <Suspense
+        fallback={
+          <Stack alignItems="center" py={6}>
+            <CircularProgress size={32} />
+          </Stack>
+        }
+      >
+        <CategorySpendChart transactions={transactions} loading={showLoader} portal="employee" />
+      </Suspense>
     </AdminPage>
   );
 }

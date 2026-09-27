@@ -5,6 +5,7 @@ import {
   Typography,
 } from "@mui/material";
 import dayjs from "dayjs";
+import { lazy, Suspense } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import {
   AdminCard,
@@ -13,6 +14,10 @@ import {
   AdminKpiRow,
   AdminPage,
 } from "../../components/admin/ui";
+
+const DailySpendChart = lazy(() =>
+  import("../../components/charts/DailySpendChart").then((m) => ({ default: m.DailySpendChart }))
+);
 import { EmployeeNavButton } from "../../components/layout/EmployeeLayout";
 import { ReceiptCard, ReceiptGrid } from "../../components/receipts/ReceiptCard";
 import { useEmployeeData } from "../../context/EmployeeDataContext";
@@ -75,7 +80,7 @@ export function EmployeeHomePage() {
 
   const recentTx = [...transactions]
     .sort((a, b) => dayjs(b.dateTime).valueOf() - dayjs(a.dateTime).valueOf())
-    .slice(0, 5);
+    .slice(0, 12);
 
   return (
     <AdminPage
@@ -92,6 +97,10 @@ export function EmployeeHomePage() {
           accent="info"
         />
       </AdminKpiRow>
+
+      <Suspense fallback={null}>
+        <DailySpendChart transactions={transactions} portal="employee" />
+      </Suspense>
 
       <AdminCard
         title="Quick actions"
@@ -114,8 +123,13 @@ export function EmployeeHomePage() {
         </Stack>
       </AdminCard>
 
-      <Stack direction={{ xs: "column", lg: "row" }} spacing={ADMIN.sectionGap} useFlexGap>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
+      <Stack
+        direction={{ xs: "column", lg: "row" }}
+        spacing={ADMIN.sectionGap}
+        useFlexGap
+        alignItems="stretch"
+      >
+        <Box sx={{ flex: 1, minWidth: 0, display: "flex" }}>
           <AdminCard
             title="Recent transactions"
             action={
@@ -123,6 +137,8 @@ export function EmployeeHomePage() {
                 See all
               </Button>
             }
+            sx={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}
+            contentSx={{ flex: 1, display: "flex", flexDirection: "column" }}
           >
             {recentTx.length === 0 ? (
               <AdminEmptyState
@@ -130,7 +146,7 @@ export function EmployeeHomePage() {
                 description="When you pay via the AllPay mobile app or submit payment proof, expenses appear here."
               />
             ) : (
-              <Stack spacing={1.25}>
+              <Stack spacing={1.25} sx={{ flex: 1 }}>
                 {recentTx.map((tx) => (
                   <Box
                     key={tx.id}
@@ -165,23 +181,31 @@ export function EmployeeHomePage() {
           </AdminCard>
         </Box>
 
-        <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Box sx={{ flex: 1, minWidth: 0, display: "flex" }}>
           <AdminCard
             title="Workspace"
             description="Each area mirrors what finance sees for your account."
+            sx={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}
+            contentSx={{ flex: 1, display: "flex", flexDirection: "column" }}
           >
-            <Stack spacing={1.5}>
+            <Stack spacing={1.5} sx={{ flex: 1, height: "100%" }}>
               {HOME_LINKS.map((link) => (
                 <Box
                   key={link.title}
                   sx={{
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center",
+                    alignItems: "flex-start",
                     border: `1px solid ${ADMIN.border.default}`,
                     borderRadius: 1,
                     p: 1.5,
+                    minHeight: 0,
                   }}
                 >
-                  <Typography fontWeight={700}>{link.title}</Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 1.25 }}>
+                  <Typography fontWeight={700} sx={{ width: "100%" }}>{link.title}</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 1.25, width: "100%" }}>
                     {link.body}
                   </Typography>
                   <EmployeeNavButton label={link.label} to={link.to} variant={link.variant} />

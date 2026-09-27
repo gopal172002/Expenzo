@@ -82,9 +82,6 @@ export function LoginPage() {
           <Typography variant="h5" fontWeight={800} gutterBottom>
             Log in to allpay
           </Typography>
-          <Typography color="text.secondary" sx={{ mb: 2 }}>
-            Choose your workspace — admin finance console or employee self-service.
-          </Typography>
 
           <Tabs
             value={portal}
@@ -94,17 +91,6 @@ export function LoginPage() {
             <Tab value="admin" icon={<AdminPanelSettingsOutlined />} iconPosition="start" label="Admin" />
             <Tab value="employee" icon={<BadgeOutlined />} iconPosition="start" label="Employee" />
           </Tabs>
-
-          {portal === "admin" ? (
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Finance, HR, and auditors — approve transactions, policies, and exports.
-            </Typography>
-          ) : (
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Log in with your work email and password. Employee IDs (emp1, emp2, …) can be reused across
-              companies, so email is the unique login.
-            </Typography>
-          )}
 
           {error ? (
             <Alert severity={needPasswordSetup ? "warning" : "error"} sx={{ mb: 2 }}>
@@ -171,7 +157,7 @@ export function LoginPage() {
                   Register
                 </Link>
                 {" · "}
-                Have an ID but no password?{" "}
+                Have an ID or email but no password?{" "}
                 <Link component={RouterLink} to="/employee/register" state={{ complete: true }} fontWeight={700}>
                   Complete setup
                 </Link>

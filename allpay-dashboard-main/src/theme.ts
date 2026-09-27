@@ -105,6 +105,19 @@ export const SIDEBAR = {
   brand: "#F9FAFB",
 } as const;
 
+/** Keep sidebar scrollable without the thick Windows track. */
+export const SIDEBAR_SCROLL_SX = {
+  overflowX: "hidden",
+  overflowY: "auto",
+  scrollbarWidth: "none",
+  msOverflowStyle: "none",
+  "&::-webkit-scrollbar": {
+    width: 0,
+    height: 0,
+    display: "none",
+  },
+} as const;
+
 const fontFamily = '"Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif';
 
 /** Admin/employee product theme: dense, high-contrast, finance-ops. */

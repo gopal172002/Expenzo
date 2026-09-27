@@ -8,6 +8,7 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -109,7 +110,7 @@ export const AdminFraudPage = () => {
           }
           sx={{ border: "none", borderRadius: 0, minHeight: 120 }}
         >
-          <Table size="small" sx={{ opacity: queueQuery.isFetching ? 0.85 : 1 }}>
+          <Table size="small" sx={{ minWidth: 1100, opacity: queueQuery.isFetching ? 0.85 : 1 }}>
             <TableHead>
               <TableRow>
                 <TableCell>Claim</TableCell>
@@ -119,15 +120,17 @@ export const AdminFraudPage = () => {
                 <TableCell align="right">Amount</TableCell>
                 <TableCell>Date</TableCell>
                 <TableCell>Risk</TableCell>
-                <TableCell>Why</TableCell>
+                <TableCell sx={{ width: 260 }}>Why</TableCell>
                 <TableCell>Query</TableCell>
                 <TableCell align="right" />
               </TableRow>
             </TableHead>
             <TableBody>
-              {items.map((tx) => (
+              {items.map((tx) => {
+                const why = tx.verification?.headline ?? "Not verified yet";
+                return (
                 <TableRow key={tx.id} hover>
-                  <TableCell>
+                  <TableCell sx={{ whiteSpace: "nowrap" }}>
                     <Typography variant="body2" fontWeight={700}>
                       {tx.merchantName}
                     </Typography>
@@ -135,30 +138,44 @@ export const AdminFraudPage = () => {
                       {tx.id}
                     </Typography>
                   </TableCell>
-                  <TableCell>
+                  <TableCell sx={{ whiteSpace: "nowrap" }}>
                     <Typography variant="body2">{tx.employeeName}</Typography>
                     <Typography variant="caption" color="text.secondary">
                       {tx.employeeId}
                     </Typography>
                   </TableCell>
-                  <TableCell>{tx.department}</TableCell>
+                  <TableCell sx={{ whiteSpace: "nowrap" }}>{tx.department}</TableCell>
                   <TableCell>
                     <Chip size="small" variant="outlined" label={tx.category} />
                   </TableCell>
-                    <TableCell align="right">{inr(tx.amount)}</TableCell>
-                  <TableCell>{dayjs(tx.dateTime).format("DD MMM YYYY HH:mm")}</TableCell>
+                  <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>{inr(tx.amount)}</TableCell>
+                  <TableCell sx={{ whiteSpace: "nowrap" }}>{dayjs(tx.dateTime).format("DD MMM YYYY HH:mm")}</TableCell>
                   <TableCell>
                     <VerificationScoreChip
                       score={tx.verificationScore}
                       verdict={tx.verificationVerdict}
                     />
                   </TableCell>
-                  <TableCell sx={{ maxWidth: 320 }}>
-                    <Typography variant="caption" color="text.secondary">
-                      {tx.verification?.headline ?? "Not verified yet"}
-                    </Typography>
+                  <TableCell sx={{ width: 260, minWidth: 220, maxWidth: 280, verticalAlign: "middle" }}>
+                    <Tooltip title={why} placement="top-start">
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                          fontSize: 13,
+                          lineHeight: 1.4,
+                          cursor: "help",
+                        }}
+                      >
+                        {why}
+                      </Typography>
+                    </Tooltip>
                   </TableCell>
-                  <TableCell>
+                  <TableCell sx={{ whiteSpace: "nowrap" }}>
                     <ClaimTicketStatusChip status={tx.claimTicketStatus} />
                   </TableCell>
                   <TableCell align="right">
@@ -173,7 +190,8 @@ export const AdminFraudPage = () => {
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </AdminTableShell>

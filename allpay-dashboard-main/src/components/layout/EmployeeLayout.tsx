@@ -31,7 +31,7 @@ import { useMemo, useState } from "react";
 import { Link as RouterLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useEmployeeData } from "../../context/EmployeeDataContext";
 import { useAuth } from "../../context/AuthContext";
-import { ADMIN, SIDEBAR } from "../../theme";
+import { ADMIN, SIDEBAR, SIDEBAR_SCROLL_SX } from "../../theme";
 
 const navItems = [
   { label: "Home", to: "/employee", icon: <HomeOutlined fontSize="small" /> },
@@ -223,6 +223,7 @@ export const EmployeeLayout = () => {
             boxSizing: "border-box",
             borderRight: "none",
             bgcolor: SIDEBAR.bg,
+            ...SIDEBAR_SCROLL_SX,
           },
         }}
       >

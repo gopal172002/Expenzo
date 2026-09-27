@@ -66,6 +66,7 @@ export function EmployeeTransactionDetailPage() {
       </Card>
 
       <ClaimQueryThread
+        variant="widget"
         ticket={ticket}
         role="employee"
         emptyMessage="Finance has not raised any question about this claim."
