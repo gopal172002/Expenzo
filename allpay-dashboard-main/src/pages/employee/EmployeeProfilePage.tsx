@@ -20,7 +20,6 @@ import type { SvgIconComponent } from "@mui/icons-material";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useEmployeeData } from "../../context/EmployeeDataContext";
-import { ADMIN } from "../../theme";
 
 function initialsOf(name: string): string {
   const parts = name.replace(/@.*/, "").split(/[\s._-]+/).filter(Boolean);
